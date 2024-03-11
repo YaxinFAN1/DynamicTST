@@ -109,10 +109,10 @@ if __name__ == '__main__':
     if os.path.exists(train_mol_file) and not args.remake_dataset:
         print('loading dataset..')
         if args.do_train:
-            train_dataset_hu = torch.load(train_hu_file)
+            # train_dataset_hu = torch.load(train_hu_file)
             train_dataset_ou5 = torch.load(train_ou5_file)
-            train_dataset_ou10 = torch.load(train_ou10_file)
-            train_dataset_ou15 = torch.load(train_ou15_file)
+            # train_dataset_ou10 = torch.load(train_ou10_file)
+            # train_dataset_ou15 = torch.load(train_ou15_file)
             eval_dataset_mol = torch.load(eval_mol_file)
         train_dataset_mol = torch.load(train_mol_file)
         relations, type2ids, id2types = train_dataset_mol.relations, train_dataset_mol.type2ids, train_dataset_mol.id2types
@@ -123,20 +123,20 @@ if __name__ == '__main__':
             test_dataset_mol.get_relations(relations, type2ids, id2types)
             test_dataset_mol.get_discourse_graph()
     else:
-        train_dataset_hu = DialogueDataset(args=args, filename= args.train_hu_file, tokenizer=tokenizer, mode='train',text_max_sep_len=args.utt_max_len,
-                                           total_seq_len = args.max_hu_text_len)
+        # train_dataset_hu = DialogueDataset(args=args, filename= args.train_hu_file, tokenizer=tokenizer, mode='train',text_max_sep_len=args.utt_max_len,
+        #                                    total_seq_len = args.max_hu_text_len)
 
         train_dataset_ou5 = DialogueDataset(args=args, filename=args.train_ou5_file, tokenizer=tokenizer,
                                                  mode='train', text_max_sep_len=args.utt_max_len,
                                                  total_seq_len=args.max_ou5_text_len)
 
-        train_dataset_ou10 = DialogueDataset(args=args, filename=args.train_ou10_file, tokenizer=tokenizer,
-                                            mode='train', text_max_sep_len=args.utt_max_len,
-                                            total_seq_len=args.max_ou10_text_len)
+        # train_dataset_ou10 = DialogueDataset(args=args, filename=args.train_ou10_file, tokenizer=tokenizer,
+        #                                     mode='train', text_max_sep_len=args.utt_max_len,
+        #                                     total_seq_len=args.max_ou10_text_len)
 
-        train_dataset_ou15 = DialogueDataset(args=args, filename=args.train_ou15_file, tokenizer=tokenizer,
-                                            mode='train', text_max_sep_len=args.utt_max_len,
-                                            total_seq_len=args.max_ou15_text_len)
+        # train_dataset_ou15 = DialogueDataset(args=args, filename=args.train_ou15_file, tokenizer=tokenizer,
+        #                                     mode='train', text_max_sep_len=args.utt_max_len,
+        #                                     total_seq_len=args.max_ou15_text_len)
 
         train_dataset_mol = DialogueDataset(args=args, filename=args.train_mol_file, tokenizer=tokenizer, mode='train',
                                         text_max_sep_len=args.utt_max_len,
@@ -155,25 +155,25 @@ if __name__ == '__main__':
         eval_dataset_mol.get_relations(relations, type2ids, id2types)
         eval_dataset_mol.get_discourse_graph()
 
-        train_dataset_hu.get_relations(relations, type2ids, id2types)
-        train_dataset_hu.get_discourse_graph()
+        # train_dataset_hu.get_relations(relations, type2ids, id2types)
+        # train_dataset_hu.get_discourse_graph()
 
         train_dataset_ou5.get_relations(relations, type2ids, id2types)
         train_dataset_ou5.get_discourse_graph()
 
-        train_dataset_ou10.get_relations(relations, type2ids, id2types)
-        train_dataset_ou10.get_discourse_graph()
+        # train_dataset_ou10.get_relations(relations, type2ids, id2types)
+        # train_dataset_ou10.get_discourse_graph()
 
-        train_dataset_ou15.get_relations(relations, type2ids, id2types)
-        train_dataset_ou15.get_discourse_graph()
+        # train_dataset_ou15.get_relations(relations, type2ids, id2types)
+        # train_dataset_ou15.get_discourse_graph()
 
         print('saving dataset..')
         torch.save(train_dataset_mol, train_mol_file)
         torch.save(eval_dataset_mol, eval_mol_file)
-        torch.save(train_dataset_hu, train_hu_file)
+        # torch.save(train_dataset_hu, train_hu_file)
         torch.save(train_dataset_ou5, train_ou5_file)
-        torch.save(train_dataset_ou10, train_ou10_file)
-        torch.save(train_dataset_ou15, train_ou15_file)
+        # torch.save(train_dataset_ou10, train_ou10_file)
+        # torch.save(train_dataset_ou15, train_ou15_file)
     args.relation_type_num = len(id2types)
     pretrained_model = AutoModel.from_pretrained(args.model_name_or_path)
 
@@ -515,22 +515,24 @@ if __name__ == '__main__':
                                          shuffle=False,
                                          collate_fn=eval_collate_fn_mol)
 
-        train_dataloader_hu = DataLoader(dataset=train_dataset_hu, batch_size=args.hu_pool_size, shuffle=True,
-                                            collate_fn=train_collate_fn_hu)
+        # train_dataloader_hu = DataLoader(dataset=train_dataset_hu, batch_size=args.hu_pool_size, shuffle=True,
+        #                                     collate_fn=train_collate_fn_hu)
 
+        train_dataloader_hu = '' 
 
         train_dataloader_ou5 = DataLoader(dataset=train_dataset_ou5, batch_size=args.ou5_pool_size,
                                                shuffle=True,
                                                collate_fn=train_collate_fn_ou_len5)
 
-        train_dataloader_ou10 = DataLoader(dataset=train_dataset_ou10, batch_size=args.ou10_pool_size,
-                                               shuffle=True,
-                                               collate_fn=train_collate_fn_ou_len10)
+        # train_dataloader_ou10 = DataLoader(dataset=train_dataset_ou10, batch_size=args.ou10_pool_size,
+        #                                        shuffle=True,
+        #                                        collate_fn=train_collate_fn_ou_len10)
 
-        train_dataloader_ou15 = DataLoader(dataset=train_dataset_ou15, batch_size=args.ou15_pool_size,
-                                               shuffle=True,
-                                               collate_fn=train_collate_fn_ou_len15)
-        
+        # train_dataloader_ou15 = DataLoader(dataset=train_dataset_ou15, batch_size=args.ou15_pool_size,
+        #                                        shuffle=True,
+        #                                        collate_fn=train_collate_fn_ou_len15)
+        train_dataloader_ou5 = ''
+        train_dataloader_ou10 = ''
         #TST
         args.TST_Learning_Mode = True
         model = PolicyNetwork(args=args, pretrained_model=pretrained_model)
@@ -538,10 +540,10 @@ if __name__ == '__main__':
         # state_dict = torch.load(args.ST_model_path+'.pt')
         # model.load_state_dict(state_dict, strict=False)
         print('generate task mask')
-        parsing_mask = generate_TST_mask(args, model, 'parsing', train_dataloader_mol)
+        parsing_mask = generate_TST_mask_all(args, model, 'parsing', train_dataloader_mol)
         # hu_mask = generate_TST_mask(args, model, 'hu_ar', train_dataloader_hu)
         
-        ou5_mask = generate_TST_mask(args, model, 'ou5_ar', train_dataloader_ou5)
+        ou5_mask = generate_TST_mask_all(args, model, 'ou5_ar', train_dataloader_ou5)
         # ou10_mask = generate_TST_mask(args, model, 'ou10_ar', train_dataloader_ou10)
         # ou15_mask = generate_TST_mask(args, model, 'ou15_ar', train_dataloader_ou15)
         
