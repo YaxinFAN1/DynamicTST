@@ -462,7 +462,10 @@ if __name__ == '__main__':
         gradient_mask = dict()
         model.train()
         for name, params in model.named_parameters():
-            gradient_mask[params] = params.new_zeros(params.size())
+            if 'SSAModule.gnn' in name:
+                gradient_mask[params] = params.new_zeros(params.size())
+            if 'encoder.layer.' in name  in name :
+                gradient_mask[params] = params.new_zeros(params.size())
         N = len(train_dataloader)
         for batch in tqdm(train_dataloader):
             for mini_batch in batch:
@@ -483,8 +486,9 @@ if __name__ == '__main__':
                     loss = link_loss + label_loss
                 loss.backward()
                 for name, params in model.named_parameters():
-                    torch.nn.utils.clip_grad_norm_(params, 1.0)
-                    gradient_mask[params] += (params.grad ** 2) / N
+                     if 'SSAModule.gnn' in name or 'encoder.layer.' in name:
+                        torch.nn.utils.clip_grad_norm_(params, 1.0)
+                        gradient_mask[params] += (params.grad ** 2) / N
                 model.critic.task_model.zero_grad()
                 if args.debug:
                     break
@@ -531,8 +535,8 @@ if __name__ == '__main__':
         # train_dataloader_ou15 = DataLoader(dataset=train_dataset_ou15, batch_size=args.ou15_pool_size,
         #                                        shuffle=True,
         #                                        collate_fn=train_collate_fn_ou_len15)
-        train_dataloader_ou5 = ''
         train_dataloader_ou10 = ''
+        train_dataloader_ou15 = ''
         #TST
         args.TST_Learning_Mode = True
         model = PolicyNetwork(args=args, pretrained_model=pretrained_model)
