@@ -45,6 +45,22 @@ class ARTask(nn.Module):
         return self.link_classifier(predicted_path).reshape(batch_size, node_num, node_num), \
                self.label_classifier(predicted_path)
 
+class RSTask(nn.Module):
+    def __init__(self, params):
+        super(RSTask, self).__init__()
+        self.params = params
+        self.classifier = nn.Linear(params.hidden_size, 2)
+        self.link_classifier = Classifier(params.path_hidden_size * 2, params.path_hidden_size,
+                                          1)
+        self.label_classifier = Classifier(params.path_hidden_size * 2,
+                                           params.path_hidden_size,
+                                           params.relation_type_num)
+      
+    def forward(self, cls_embedding, predicted_path, batch_size, node_num):
+        return self.classifier(cls_embedding[0][:,0,:]),  \
+               self.label_classifier(predicted_path)
+    # self.link_classifier(predicted_path).reshape(batch_size, node_num, node_num),
+
 class TaskSpecificNetwork1(nn.Module):
     def __init__(self, params, pretained_model ):
         super(TaskSpecificNetwork1, self).__init__()
@@ -55,6 +71,10 @@ class TaskSpecificNetwork1(nn.Module):
         self.Ou5ARNetwork = ARTask(params)
         self.Ou10ARNetwork = ARTask(params)
         self.Ou15ARNetwork = ARTask(params)
+        self.HuRSNetwork = RSTask(params)
+        self.Ou5RSNetwork = RSTask(params)
+        self.Ou10RSNetwork = RSTask(params)
+        self.Ou15RSNetwork = RSTask(params)
 
     def forward(self, tasktype, texts,input_mask, segment_ids, sep_index_list, edu_nums, speakers, turns):
         rep_x = self.base_network(texts, input_mask,  segment_ids)
@@ -80,6 +100,18 @@ class TaskSpecificNetwork1(nn.Module):
             link_scores, label_scores = \
                 self.Ou15ARNetwork(predict_path, batch, node_num)
             output = (link_scores, label_scores)
+        elif tasktype == 'hu_rs':
+            scores,  label_scores = self.HuRSNetwork(rep_x, predict_path, batch, node_num)
+            output = (scores, label_scores)
+        elif tasktype == 'ou5_rs':
+            scores,   label_scores = self.Ou5RSNetwork(rep_x, predict_path, batch, node_num)
+            output = (scores, label_scores)
+        elif tasktype == 'ou10_rs':
+            scores,   label_scores = self.Ou10RSNetwork(rep_x, predict_path, batch, node_num)
+            output = (scores, label_scores)
+        elif tasktype == 'ou15_rs':
+            scores,  label_scores = self.Ou15RSNetwork(rep_x, predict_path, batch, node_num)
+            output = (scores, label_scores)
         return output
 
 class ActorNetwork(nn.Module):
@@ -227,6 +259,27 @@ class PolicyNetwork(nn.Module):
         else:
             self.task_optims['parsing'] = AdamW(param_groups, lr=args.learning_rate)
         self.loss_fns['parsing'] = nn.CrossEntropyLoss()
+
+        # RS
+        param_groups = [{'params': [p for p in self.critic.task_model.base_network.parameters() if p.requires_grad],
+                         'lr':args.pretrained_model_learning_rate}]
+        param_groups.append(
+            {'params': [p for p in self.critic.task_model.SSAModule.parameters() if p.requires_grad],
+             'lr': args.learning_rate})
+        param_groups.append({'params': [p for p in self.critic.task_model.HuRSNetwork.parameters() if p.requires_grad],
+                         'lr':args.learning_rate})
+        if args.TST_Learning_Mode:
+            optimizer_cls = AdamWTSTLearning
+            optimizer_kwargs = {
+                "betas": (.9, .999),
+                "eps": 1e-6,
+            }
+            optimizer_kwargs["lr"] = args.learning_rate
+            optimizer = optimizer_cls(param_groups, **optimizer_kwargs)
+            self.task_optims['hu_rs'] = optimizer
+        else:
+            self.task_optims['hu_rs'] = AdamW(param_groups, lr=args.learning_rate)
+        self.loss_fns['hu_rs'] = nn.CrossEntropyLoss()
         self.saved_actions = []
         self.rewards = []
 
@@ -237,7 +290,116 @@ class PolicyNetwork(nn.Module):
         batch_rep, exp_reward = self.critic(batch_x, text_mask, segmend_ids)
         action_probs = self.actor(batch_rep)
         return action_probs, batch_rep, exp_reward
+    
+    def compute_Pat1_and_loss_reward(self, tasktype, eval_dataloader, source_file):
+        eval_matrix = {
+            'hypothesis': None,
+            'reference': None,
+            'edu_num': None
+        }
+        from tqdm import tqdm
+        total_result_dic = {}
+        accum_eval_link_loss, accum_eval_label_loss = [], []
+        for batch in tqdm(eval_dataloader):
+            texts, input_mask, segment_ids, labels, sep_index, pairs, graphs, speakers, turns, edu_nums, ids = batch
+            texts, input_mask, segment_ids, graphs, speakers, turns, edu_nums = \
+                texts.cuda(), input_mask.cuda(), segment_ids.cuda(), graphs.cuda(), speakers.cuda(), turns.cuda(), edu_nums.cuda()
+            mask = get_mask(edu_nums + 1, self.args.max_edu_dist).cuda()
+            with torch.no_grad():
+                link_scores, label_scores = self.critic.task_output(tasktype, texts, input_mask, segment_ids,
+                                                                    sep_index,edu_nums, speakers, turns)
 
+            eval_link_loss, eval_label_loss = compute_loss(link_scores, label_scores, graphs, mask)
+            accum_eval_link_loss.append((eval_link_loss.sum(), eval_link_loss.size(-1)))
+            accum_eval_label_loss.append((eval_label_loss.sum(), eval_label_loss.size(-1)))
+
+            batch_size = link_scores.size(0)
+            max_len = edu_nums.max()
+            link_scores[~mask] = -1e9
+            predicted_links = torch.argmax(link_scores, dim=-1)
+            predicted_labels = torch.argmax(label_scores.reshape(-1, max_len + 1, self.args.relation_type_num)[
+                                                torch.arange(batch_size * (max_len + 1)), predicted_links.reshape(
+                                                    -1)].reshape(batch_size, max_len + 1, self.args.relation_type_num),
+                                            dim=-1)
+            predicted_links = predicted_links[:, 1:] - 1
+            predicted_labels = predicted_labels[:, 1:]
+
+            for i in range(batch_size):
+                hp_pairs = {}
+                step = 1
+                while step < edu_nums[i]:
+                    link = predicted_links[i][step].item()
+                    label = predicted_labels[i][step].item()
+                    hp_pairs[(link, step)] = label
+                    step += 1
+
+                predicted_result = {'hypothesis': hp_pairs,
+                                    'reference': pairs[i],
+                                    'edu_num': step}
+                # predicted_result['id'] = ids[i]
+                total_result_dic[ids[i]] = predicted_result
+                record_eval_result(eval_matrix, predicted_result)
+        evaluateAddressTo = EvaluateAddressTo()
+        Pat1, SessAcc = evaluateAddressTo.get_Pat1AndSessAcc(total_result_dic, source_file)
+        a, b = zip(*accum_eval_link_loss)
+        c, d = zip(*accum_eval_label_loss)
+        eval_link_loss, eval_label_loss = sum(a) / sum(b), sum(c) / sum(d)
+        if tasktype == 'hu_disentanglement' or tasktype =='ou_disentanglement':
+            total_loss = eval_link_loss
+            total_f1 = SessAcc
+        print('Pat1 is {}, SessAcc is {}'.format(Pat1, SessAcc))
+        print('link loss is {}, rel loss is {}'.format(eval_link_loss, eval_label_loss))
+        return Pat1, SessAcc
+
+
+    def compute_RS_f1_and_loss_reward(self, tasktype, eval_dataloader, des_file=None):
+        """
+        计算
+        :param eval_data:
+        :return:
+        """
+        from collections import defaultdict
+        import numpy as np
+        from tqdm import tqdm
+        from sklearn import metrics
+        accum_eval_link_loss = 0
+        predict_all_label1 = np.array([], dtype=int)
+        results = defaultdict(list)
+        labels_all_label1 \
+            = np.array([], dtype=int)
+        for batch in tqdm(eval_dataloader):
+            texts, input_mask, segment_ids, label, sep_index_list, pairs, graphs,speakers, turns, edu_nums, ids = batch
+            texts, label, speakers, turns, edu_nums = texts.cuda(), graphs.cuda(), speakers.cuda(), turns.cuda(), edu_nums.cuda()
+            input_mask = input_mask.cuda()
+            segment_ids = segment_ids.cuda()
+
+            with torch.no_grad():
+                scores, _ = self.critic.task_output(tasktype, texts, input_mask, segment_ids,  sep_index_list,
+                                                                edu_nums, speakers, turns)
+            loss = self.loss_fns[tasktype](scores, label)
+            accum_eval_link_loss += loss.item()
+            labels_bd2_label = label.data.cpu().numpy()
+            for id, label, probs in zip(ids, labels_bd2_label, scores):
+                results[id].append((id, label.item(), probs[0].item()))
+            predict_label1 = torch.max(scores.data, 1)[1].cpu().numpy()
+
+            labels_all_label1 = np.append(labels_all_label1, labels_bd2_label)
+
+            predict_all_label1 = np.append(predict_all_label1, predict_label1)
+            if self.args.debug:
+                break
+        if des_file:
+            with open(des_file, 'w', encoding='utf8') as fw:
+                import json
+                json.dump(results, fw, ensure_ascii=False, indent=4)
+        eval_loss = accum_eval_link_loss/len(eval_dataloader)
+        epoch_f1 = metrics.f1_score(labels_all_label1, predict_all_label1, average='micro')
+        report_metric = metrics.classification_report(labels_all_label1, predict_all_label1)
+        print('f1 is {}'.format(epoch_f1))
+        print(report_metric)
+        print(eval_loss)
+        return eval_loss, epoch_f1
+    
     def compute_f1_and_loss_reward(self, tasktype, eval_dataloader):
         eval_matrix = {
             'hypothesis': None,
@@ -283,7 +445,7 @@ class PolicyNetwork(nn.Module):
         a, b = zip(*accum_eval_link_loss)
         c, d = zip(*accum_eval_label_loss)
         eval_link_loss, eval_label_loss = sum(a) / sum(b), sum(c) / sum(d)
-        if tasktype == 'hu_rs' or tasktype == 'ou5_ar' or tasktype == 'ou10_ar' or tasktype == 'ou15_ar':
+        if tasktype == 'hu_ar' or tasktype == 'ou5_ar' or tasktype == 'ou10_ar' or tasktype == 'ou15_ar':
             total_loss = eval_link_loss
             total_f1 = f1_bi
         elif tasktype == 'parsing':
@@ -293,6 +455,7 @@ class PolicyNetwork(nn.Module):
         print('tasktype {}, link f1 is {}, rel f1 is {}'.format(tasktype, f1_bi, f1_multi))
         print('tasktype {}, link loss is {}, rel loss is {}'.format(tasktype, eval_link_loss, eval_label_loss))
         return total_loss, total_f1
+    
     def compute_f1_and_loss_reward_rl(self, tasktype, eval_dataloader):
         eval_matrix = {
             'hypothesis': None,
@@ -338,7 +501,7 @@ class PolicyNetwork(nn.Module):
         a, b = zip(*accum_eval_link_loss)
         c, d = zip(*accum_eval_label_loss)
         eval_link_loss, eval_label_loss = sum(a) / sum(b), sum(c) / sum(d)
-        if tasktype == 'hu_rs' or tasktype == 'ou5_ar' or tasktype == 'ou10_ar' or tasktype == 'ou15_ar':
+        if tasktype == 'hu_ar' or tasktype == 'ou5_ar' or tasktype == 'ou10_ar' or tasktype == 'ou15_ar':
             total_loss = eval_link_loss
             total_f1 = f1_bi
         elif tasktype == 'parsing':
@@ -348,19 +511,24 @@ class PolicyNetwork(nn.Module):
         print('tasktype {}, link f1 is {}'.format(tasktype, f1_bi))
         print('tasktype {}, link loss is {}'.format(tasktype, eval_link_loss))
         return total_loss, total_f1
+    
     def train_minibatch(self, task_type, batch):
         accum_train_link_loss = accum_train_label_loss = 0
         for mini_batch in batch:
-            texts, input_mask, segment_ids, labels, sep_index, pairs, graphs, speakers, turns, edu_nums = mini_batch
+            texts, input_mask, segment_ids, _, sep_index, pairs, graphs, speakers, turns, edu_nums = mini_batch
             texts, input_mask, segment_ids, graphs, speakers, turns, edu_nums = \
                     texts.cuda(), input_mask.cuda(), segment_ids.cuda(), graphs.cuda(), speakers.cuda(), turns.cuda(), edu_nums.cuda()
             mask = get_mask(node_num=edu_nums + 1, max_edu_dist=self.args.max_edu_dist).cuda()
             link_scores, label_scores = self.critic.task_output(task_type, texts, input_mask, segment_ids,  sep_index,
                                                                 edu_nums, speakers, turns)
-            link_loss, label_loss = compute_loss(link_scores.clone(), label_scores.clone(), graphs, mask )
-            link_loss = link_loss.mean()
-            label_loss = label_loss.mean()
-            if task_type=='hu_ar' or task_type=='ou5_ar' or task_type=='ou10_ar' or task_type=='ou15_ar':
+            if task_type == 'hu_rs' or task_type == 'ou5_rs' or task_type == 'ou10_rs' or task_type == 'ou15_rs':
+                link_loss = self.loss_fns[task_type](link_scores, graphs)
+                label_loss = torch.tensor([0]) #default
+                loss = link_loss
+            elif task_type=='hu_ar' or task_type=='ou5_ar' or task_type=='ou10_ar' or task_type=='ou15_ar':
+                link_loss, label_loss = compute_loss(link_scores.clone(), label_scores.clone(), graphs, mask )
+                link_loss = link_loss.mean()
+                label_loss = label_loss.mean()
                 loss = link_loss
             elif task_type =='parsing':
                 loss = link_loss + label_loss
@@ -369,6 +537,8 @@ class PolicyNetwork(nn.Module):
             self.task_optims[task_type].step()
             accum_train_link_loss += link_loss.item()
             accum_train_label_loss += label_loss.item()
+            if self.args.debug:
+                break
         return accum_train_link_loss, accum_train_label_loss
 
     def train_minibatch_rl(self, task_type, batch):

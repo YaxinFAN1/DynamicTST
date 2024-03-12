@@ -1,4 +1,5 @@
 import torch
+import json
 import numpy as np
 
 torch.autograd.set_detect_anomaly(True)
@@ -116,7 +117,6 @@ def conv_list2Dic(datalist):
     return dataDic
 
 def write_selected_data(id_file, src_file, des_file):
-    import json
     with open(id_file, 'r', encoding='utf8') as fr:
         lines  = fr.readlines()
     ids_list = list(set(a.strip() for a in lines))
@@ -129,3 +129,175 @@ def write_selected_data(id_file, src_file, des_file):
     with open(des_file,'w',encoding = 'utf8') as fw:
         json.dump(des_datas, fw, ensure_ascii=False)
     
+
+class EvaluateAddressTo:
+    """
+    判断speaker是否正确，而不是link完全一致。
+    先把link转为speaker的形式，然后判断speaker是否一致。
+    """
+    def __init__(self):
+        """
+        读取输出文件，计算p@1和Acc
+        """
+        pass
+    def readSourceFile(self, file):
+        """
+        读取source_file，得到speaker信息,
+        :param file:
+        :return:
+        """
+        speaker_dic = {}
+        with open(file,'r',encoding='utf8') as fr:
+            data = json.load(fr)
+        for da in data:
+            temp_speaker_dic  = {}
+            id = da['id']
+            for index, edu in enumerate(da['edus']):
+                temp_speaker_dic[index] = edu['speaker']
+            speaker_dic[id] = temp_speaker_dic
+        return speaker_dic
+
+    def readFile(self, file):
+        with open(file,'r',encoding='utf8')as fr:
+            lines = fr.readlines()
+        data = []
+        for line in lines:
+            line = line.strip()
+            data.append(eval(json.loads(line)))
+        new_data_dic  = {}
+        not_Same =0
+        for da in data:
+            temp_dic = {}
+            # print(da)
+            id = da['id']
+            temp_dic['hypothesis']= da['hypothesis']
+            temp_dic['reference']  = da['reference']
+            temp_dic['edu_num'] = da['edu_num']
+            new_data_dic[id] = temp_dic
+            if len(da['reference'])!=da['edu_num']-1:
+                not_Same+=1
+        return new_data_dic
+
+    def calP1(self, datadic, speaker_dic):
+        """
+        计算p@1，
+        :return:
+        """
+        P_total = P_correct = 0
+
+        for id, value  in datadic.items():
+            temp_speaker_dic = speaker_dic[id]
+            hypo = value['hypothesis']
+            ref = value['reference']
+
+            P_total += len(ref)
+            for goldlink in ref:
+                if goldlink in hypo:
+                    P_correct += 1
+
+        P_At_1 = P_correct/P_total
+        print('P_total is {}, P_correct is {}'.format(P_total, P_correct))
+        print('P@1 is {}'.format(round(P_At_1,6)))
+
+    def calP1_new(self, datadic, speaker_dic):
+        """
+        计算p@1，
+        :return:
+        """
+        P_total = P_correct = 0
+        for id, value in datadic.items():
+            temp_speaker_dic = speaker_dic[id]
+            hypo = value['hypothesis']
+            ref = value['reference']
+            hypoLinks = [list(a) for a in hypo]
+            hypoLinks = sorted(hypoLinks, key=lambda x: x[1])
+            # 得到当前y的address to,根据x转换得到speaker
+            hypo_address_to = []  # [utt,address_to_speaker],[utt,address_to_speaker]
+            for link in hypoLinks:
+                if link[0]>=0:
+                    hypo_address_to.append((link[1], temp_speaker_dic[link[0]]))
+            refLinks = [list(a) for a in ref]
+            refLinks = sorted(refLinks, key=lambda x: x[1])
+            ref_address_to = []  # [utt,address_to_speaker],[utt,address_to_speaker]
+            for link in refLinks:
+                ref_address_to.append((link[1], temp_speaker_dic[link[0]]))
+
+            P_total += len(set(ref_address_to))
+            for a in set(ref_address_to):
+                if a in set(hypo_address_to):
+                    P_correct += 1
+
+        P_At_1 = P_correct / P_total
+        print(P_correct)
+        print(P_total)
+        # print('P_total is {}, P_correct is {}'.format(P_total, P_correct))
+        # print('P@1 is {}'.format(round(P_At_1, 6)))
+        return P_At_1
+    def IsAallInB(self,set1,set2):
+        """
+        判断set1中的元素是够全部在set2中
+        :param set1:
+        :param set2:
+        :return:
+        """
+        Flag = True
+        for a in set1:
+            if a in set2:
+                continue
+            else:
+                Flag = False
+                break
+        return Flag
+
+    def calSesseionAcc(self, datadic, speakerdic):
+        """
+        计算session acc（所有的link都正确才算对）
+        :param datadic:
+        :return:
+        """
+        Acc_total = Acc_correct = 0
+        for id, value  in datadic.items():
+            Acc_total += 1
+            # print(_)
+            temp_speaker_dic = speakerdic[id]
+            hypo = value['hypothesis']
+            ref = value['reference']
+            hypoLinks = [list(a) for a in hypo]
+            hypoLinks = sorted(hypoLinks, key=lambda x: x[1])
+            # 得到当前y的address to,根据x转换得到speaker
+            hypo_address_to = []  # [utt,address_to_speaker],[utt,address_to_speaker]
+            for link in hypoLinks:
+                if link[0]>=0:
+
+                    hypo_address_to.append((link[1], temp_speaker_dic[link[0]]))
+            refLinks = [list(a) for a in ref]
+            refLinks = sorted(refLinks, key=lambda x: x[1])
+            ref_address_to = []  # [utt,address_to_speaker],[utt,address_to_speaker]
+            for link in refLinks:
+                ref_address_to.append((link[1], temp_speaker_dic[link[0]]))
+            ref_address_to_set = set(ref_address_to)
+            hypo_address_to_set = set(hypo_address_to)
+            if self.IsAallInB(ref_address_to_set,hypo_address_to_set):
+                Acc_correct += 1
+        SessionAcc = Acc_correct / Acc_total
+        print(Acc_correct)
+        print(Acc_total)
+        return SessionAcc
+
+    def test(self, inputfile, sourcetestfile):
+        """
+        This is a test funciton.
+        :return:
+        """
+        speakerdic = self.readSourceFile(sourcetestfile)
+        datadic = self.readFile(inputfile)
+        self.calP1_new(datadic, speakerdic)
+        self.calSesseionAcc(datadic, speakerdic)
+
+    def get_Pat1AndSessAcc(self,datadic, sourcetestfile):
+        print('ssss')
+        print(sourcetestfile)
+        speakerdic = self.readSourceFile(sourcetestfile)
+        Pat1 = self.calP1_new(datadic, speakerdic)
+        SessionAcc = self.calSesseionAcc(datadic, speakerdic)
+        return Pat1, SessionAcc
