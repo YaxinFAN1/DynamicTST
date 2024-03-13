@@ -395,10 +395,12 @@ class PolicyNetwork(nn.Module):
         print(report_metric)
         print('eval_loss')
         print(eval_loss)
-        print('P@1 score is {}'.format(self.compute_RS_P_at_1(results=results)))
+        p_at1_r2, Pat1_r10 = self.compute_RS_P_at_1(results=results)
+        print('P@1r2 score is {}, P@1r10 score is {}'.format(p_at1_r2, Pat1_r10))
         return eval_loss, epoch_f1
     
-    def compute_RS_P_at_1(self, results):
+    
+    def compute_RS_P_at_1(self, results,):
         """
         results = [id, label, score]
         """
@@ -412,38 +414,15 @@ class PolicyNetwork(nn.Module):
                 result_dic[res[0]] = [[res[1], res[2], res[3][1]]]# res[3][1]指的是预测为follow标签的概率
             else:
                 result_dic[res[0]].append([res[1], res[2], res[3][1]])
-        return top_1_precision(result_dic)
-        
+        r_2_results_dic = {}
+        for key, value in result_dic.items():
+            r_2_results_dic[key] = value[:2]
+        P_at1_r2 = top_1_precision(r_2_results_dic)
+        P_at1_r10 = top_1_precision(result_dic)
+        return P_at1_r2, P_at1_r10
 
 
-    
 
-    # def compute_RS_P_at_1(self, tasktype, test_dataloader):
-    #     """
-    #     计算
-    #     :param eval_data:
-    #     :return:
-    #     """
-    #     results = []
-    #     for batch in tqdm(test_dataloader):
-    #         texts, input_mask, segment_ids, _, sep_index_list, pairs, graphs, speakers, turns, edu_nums, ids = batch
-    #         texts, labels, speakers, turns, edu_nums = texts.cuda(), graphs.cuda(), speakers.cuda(), turns.cuda(), edu_nums.cuda()
-    #         input_mask = input_mask.cuda()
-    #         segment_ids = segment_ids.cuda()
-
-    #         with torch.no_grad():
-    #             scores, _ = self.critic.task_output(tasktype, texts, input_mask, segment_ids,  sep_index_list,
-    #                                                             edu_nums, speakers, turns)
-            
-    #         scores =  scores.data.cpu().numpy()
-    #         labels = labels.data.cpu().numpy()
-    #         for id, label, score in zip(ids, labels, scores):
-    #             results.append([id, label, score])
-            
-    #     print('results length: {}'.format(results))
-
-
-    
 
     def compute_f1_and_loss_reward(self, tasktype, eval_dataloader):
         eval_matrix = {
