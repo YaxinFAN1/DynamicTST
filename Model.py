@@ -358,48 +358,93 @@ class PolicyNetwork(nn.Module):
         :param eval_data:
         :return:
         """
-        from collections import defaultdict
-        import numpy as np
-        from tqdm import tqdm
-        from sklearn import metrics
         accum_eval_link_loss = 0
         predict_all_label1 = np.array([], dtype=int)
-        results = defaultdict(list)
+        results = []
         labels_all_label1 \
             = np.array([], dtype=int)
         for batch in tqdm(eval_dataloader):
-            texts, input_mask, segment_ids, label, sep_index_list, pairs, graphs,speakers, turns, edu_nums, ids = batch
-            texts, label, speakers, turns, edu_nums = texts.cuda(), graphs.cuda(), speakers.cuda(), turns.cuda(), edu_nums.cuda()
+            texts, input_mask, segment_ids, _, sep_index_list, pairs, graphs,speakers, turns, edu_nums, ids = batch
+            texts, labels, speakers, turns, edu_nums = texts.cuda(), graphs.cuda(), speakers.cuda(), turns.cuda(), edu_nums.cuda()
             input_mask = input_mask.cuda()
             segment_ids = segment_ids.cuda()
 
             with torch.no_grad():
                 scores, _ = self.critic.task_output(tasktype, texts, input_mask, segment_ids,  sep_index_list,
                                                                 edu_nums, speakers, turns)
-            loss = self.loss_fns[tasktype](scores, label)
-            accum_eval_link_loss += loss.item()
-            labels_bd2_label = label.data.cpu().numpy()
-            for id, label, probs in zip(ids, labels_bd2_label, scores):
-                results[id].append((id, label.item(), probs[0].item()))
+            loss = self.loss_fns[tasktype](scores, labels)
             predict_label1 = torch.max(scores.data, 1)[1].cpu().numpy()
+            accum_eval_link_loss += loss.item()
+            scores =  scores.data.cpu().tolist()
+            labels = labels.data.cpu().tolist()
+            for id, label, probs in zip(ids, labels, scores):
+                results.append((id, label, probs))
+            
 
-            labels_all_label1 = np.append(labels_all_label1, labels_bd2_label)
+            labels_all_label1 = np.append(labels_all_label1, labels)
 
             predict_all_label1 = np.append(predict_all_label1, predict_label1)
             if self.args.debug:
                 break
-        if des_file:
-            with open(des_file, 'w', encoding='utf8') as fw:
-                import json
-                json.dump(results, fw, ensure_ascii=False, indent=4)
+        
         eval_loss = accum_eval_link_loss/len(eval_dataloader)
         epoch_f1 = metrics.f1_score(labels_all_label1, predict_all_label1, average='micro')
         report_metric = metrics.classification_report(labels_all_label1, predict_all_label1)
         print('f1 is {}'.format(epoch_f1))
+        print('report_metric')
         print(report_metric)
+        print('eval_loss')
         print(eval_loss)
+        print('P@1 score is {}'.format(self.compute_RS_P_at_1(results=results)))
         return eval_loss, epoch_f1
     
+    def compute_RS_P_at_1(self, results):
+        """
+        results = [id, label, score]
+        """
+        result_dic = {}
+        new_results = []
+        for result in results:
+            example_id, answer_id = result[0].split('_resid_') 
+            new_results.append( [example_id, answer_id, result[1], result[2]] )
+        for res in new_results:
+            if res[0] not in result_dic:
+                result_dic[res[0]] = [[res[1], res[2], res[3][1]]]# res[3][1]指的是预测为follow标签的概率
+            else:
+                result_dic[res[0]].append([res[1], res[2], res[3][1]])
+        return top_1_precision(result_dic)
+        
+
+
+    
+
+    # def compute_RS_P_at_1(self, tasktype, test_dataloader):
+    #     """
+    #     计算
+    #     :param eval_data:
+    #     :return:
+    #     """
+    #     results = []
+    #     for batch in tqdm(test_dataloader):
+    #         texts, input_mask, segment_ids, _, sep_index_list, pairs, graphs, speakers, turns, edu_nums, ids = batch
+    #         texts, labels, speakers, turns, edu_nums = texts.cuda(), graphs.cuda(), speakers.cuda(), turns.cuda(), edu_nums.cuda()
+    #         input_mask = input_mask.cuda()
+    #         segment_ids = segment_ids.cuda()
+
+    #         with torch.no_grad():
+    #             scores, _ = self.critic.task_output(tasktype, texts, input_mask, segment_ids,  sep_index_list,
+    #                                                             edu_nums, speakers, turns)
+            
+    #         scores =  scores.data.cpu().numpy()
+    #         labels = labels.data.cpu().numpy()
+    #         for id, label, score in zip(ids, labels, scores):
+    #             results.append([id, label, score])
+            
+    #     print('results length: {}'.format(results))
+
+
+    
+
     def compute_f1_and_loss_reward(self, tasktype, eval_dataloader):
         eval_matrix = {
             'hypothesis': None,

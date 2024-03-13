@@ -1,5 +1,7 @@
 import torch
 import json
+import operator
+import math
 import numpy as np
 
 torch.autograd.set_detect_anomaly(True)
@@ -301,3 +303,37 @@ class EvaluateAddressTo:
         Pat1 = self.calP1_new(datadic, speakerdic)
         SessionAcc = self.calSesseionAcc(datadic, speakerdic)
         return Pat1, SessionAcc
+
+def is_valid_query(v):
+    num_pos = 0
+    num_neg = 0
+    for aid, label, score in v:
+        if label > 0:
+            num_pos += 1
+        else:
+            num_neg += 1
+    if num_pos > 0 and num_neg > 0:
+        return True
+    else:
+        return False
+
+
+def top_1_precision(results):
+    """
+    results[question_id[i]].append((answer_id[i], label[i], prob_score[0]))
+    """
+    num_query = 0
+    top_1_correct = 0.0
+    for k, v in results.items():
+        if not is_valid_query(v):
+            continue
+        num_query += 1
+        sorted_v = sorted(v, key=operator.itemgetter(2), reverse=True)
+        aid, label, score = sorted_v[0]
+        if label > 0:
+            top_1_correct += 1
+
+    if num_query > 0:
+        return top_1_correct / num_query
+    else:
+        return 0.0

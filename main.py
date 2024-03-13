@@ -149,8 +149,8 @@ if __name__ == '__main__':
             # train_ou10_rs_file = torch.load(train_ou10_rs_file)
             # train_ou15_rs_file = torch.load(train_ou15_rs_file)
             eval_dataset_mol = torch.load(eval_mol_file)
-            train_dataset_mol = torch.load(train_mol_file)
-        
+            
+        train_dataset_mol = torch.load(train_mol_file)
         relations, type2ids, id2types = train_dataset_mol.relations, train_dataset_mol.type2ids, train_dataset_mol.id2types
         if not args.do_train:
 
@@ -339,7 +339,7 @@ if __name__ == '__main__':
         turns = ints_to_tensor(list(turns))
         graphs = ints_to_tensor(list(graphs))
         edu_nums = torch.tensor(edu_nums)
-        return texts, input_mask, segment_ids, _, sep_index, pairs,graphs, speakers, turns, edu_nums, ids
+        return texts, input_mask, segment_ids, _, sep_index, pairs,graphs, speakers, turns, edu_nums, list(ids)
 
     def train_collate_fn_hu(examples):
 
@@ -720,6 +720,11 @@ if __name__ == '__main__':
             hu_rs_eval_loss, hu_epoch_f1 = model.compute_RS_f1_and_loss_reward(tasktype='hu_rs',
                                                                       eval_dataloader=eval_dataloader_hu_rs)
 
+            print('eval hu rs eval loss {}'.format(hu_rs_eval_loss))
+            if hu_rs_eval_loss < max_reward:
+                torch.save(model.state_dict(), args.TST_model_path + '.pt')
+                max_reward = hu_rs_eval_loss
+
             # mol_linkandrel_loss, _ = model.compute_f1_and_loss_reward(tasktype='parsing',
             #                                                           eval_dataloader=eval_dataloader_mol)
            
@@ -736,17 +741,25 @@ if __name__ == '__main__':
         test_dataloader_mol = DataLoader(dataset=test_dataset_mol, batch_size=args.eval_mol_pool_size,
                                          shuffle=False,
                                          collate_fn=eval_collate_fn_mol)
-        test_dataloader_ou_len5 = DataLoader(dataset=test_dataset_ou_len5, batch_size=args.eval_len5_pool_size,
-                                         shuffle=False,
-                                         collate_fn=eval_collate_fn_mol)
+        # test_dataloader_ou_len5 = DataLoader(dataset=test_dataset_ou_len5, batch_size=args.eval_len5_pool_size,
+        #                                  shuffle=False,
+        #                                  collate_fn=eval_collate_fn_mol)
+
+        test_dataloader_hu_rs =   DataLoader(dataset=test_dataset_hu_rs, batch_size=args.hu_pool_size,
+                                               shuffle=False,
+                                               collate_fn=eval_collate_fn_mol)
+        
         model = PolicyNetwork(args=args, pretrained_model=pretrained_model)
         model = model.to(args.device)
         state_dict = torch.load(args.TST_model_path+'.pt')
         model.load_state_dict(state_dict,strict=False)
         model.eval()
-        total_loss, total_f1 = model.compute_f1_and_loss_reward(tasktype='parsing',
-                                                          eval_dataloader=test_dataloader_mol)
-        print('ou_address to')
-        Re, total_f1 = model.compute_Pat1_and_loss_reward(tasktype='ou5_ar',
-                                                          eval_dataloader=test_dataloader_ou_len5,
-                                                          source_file=args.test_ou_len5_file)
+        # total_loss, total_f1 = model.compute_f1_and_loss_reward(tasktype='parsing',
+        #                                                   eval_dataloader=test_dataloader_mol)
+        # print('ou_address to')
+        # Re, total_f1 = model.compute_Pat1_and_loss_reward(tasktype='ou5_ar',
+        #                                                   eval_dataloader=test_dataloader_ou_len5,
+        #                                                   source_file=args.test_ou_len5_file)
+
+        hu_rs_eval_loss, hu_epoch_f1 = model.compute_RS_f1_and_loss_reward(tasktype='hu_rs',
+                                                            eval_dataloader=test_dataloader_hu_rs)
