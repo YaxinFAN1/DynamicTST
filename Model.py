@@ -555,6 +555,9 @@ class PolicyNetwork(nn.Module):
                 label_loss = label_loss.mean()
                 loss = link_loss
             elif task_type =='parsing':
+                link_loss, label_loss = compute_loss(link_scores.clone(), label_scores.clone(), graphs, mask )
+                link_loss = link_loss.mean()
+                label_loss = label_loss.mean()
                 loss = link_loss + label_loss
             self.critic.task_model.zero_grad()
             loss.backward()

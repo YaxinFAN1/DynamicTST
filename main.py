@@ -476,16 +476,16 @@ if __name__ == '__main__':
         total_hu_rs_loss = total_ou5_rs_loss = total_ou10_rs_loss = total_ou15_rs_loss = 0
         
         # train hu RS
-        for hu_rs_data_batch in tqdm(train_hu_rs_dataloader):
-            hu_rs_link_loss, _ = \
-                mtl_model.train_minibatch('hu_rs', hu_rs_data_batch)
-            total_hu_rs_loss += hu_rs_link_loss
-            step += 1
-            if step % args.report_step == 0:
-                print('\t{} step hu rs loss: {:.4f} '.format(step, total_hu_rs_loss / args.report_step))
-                total_hu_rs_loss = 0
-            if args.debug:
-                break 
+        # for hu_rs_data_batch in tqdm(train_hu_rs_dataloader):
+        #     hu_rs_link_loss, _ = \
+        #         mtl_model.train_minibatch('hu_rs', hu_rs_data_batch)
+        #     total_hu_rs_loss += hu_rs_link_loss
+        #     step += 1
+        #     if step % args.report_step == 0:
+        #         print('\t{} step hu rs loss: {:.4f} '.format(step, total_hu_rs_loss / args.report_step))
+        #         total_hu_rs_loss = 0
+        #     if args.debug:
+        #         break 
         
         # #train ou5
         # for ou5_data_batch in tqdm(train_ou5_dataloader):
@@ -533,20 +533,20 @@ if __name__ == '__main__':
         #     if args.debug:
         #         break 
         # train mol
-        # for mol_data_batch in tqdm(train_mol_dataloader):
-        #     temp_link_mol_loss, temp_rel_mol_loss = \
-        #         mtl_model.train_minibatch('parsing', mol_data_batch)
-        #     total_molweni_link_loss += temp_link_mol_loss
-        #     total_molweni_rel_loss += temp_rel_mol_loss
-        #     step += 1
-        #     if step % args.report_step == 0:
-        #         print(
-        #             '\t{} mol link loss {:.4f}, rel loss {:.4f} '.format(step,
-        #                           total_molweni_link_loss / args.report_step,
-        #                           total_molweni_rel_loss / args.report_step))
-        #         total_molweni_link_loss = total_molweni_rel_loss = 0
-        #     if args.debug:
-        #         break 
+        for mol_data_batch in tqdm(train_mol_dataloader):
+            temp_link_mol_loss, temp_rel_mol_loss = \
+                mtl_model.train_minibatch('parsing', mol_data_batch)
+            total_molweni_link_loss += temp_link_mol_loss
+            total_molweni_rel_loss += temp_rel_mol_loss
+            step += 1
+            if step % args.report_step == 0:
+                print(
+                    '\t{} mol link loss {:.4f}, rel loss {:.4f} '.format(step,
+                                  total_molweni_link_loss / args.report_step,
+                                  total_molweni_rel_loss / args.report_step))
+                total_molweni_link_loss = total_molweni_rel_loss = 0
+            if args.debug:
+                break 
             
     def generate_TST_mask(args, model, task_type, train_dataloader):
         gradient_mask = dict()
@@ -717,24 +717,24 @@ if __name__ == '__main__':
                             '', 
                             '',
                             train_dataloader_mol)
-            hu_rs_eval_loss, hu_epoch_f1 = model.compute_RS_f1_and_loss_reward(tasktype='hu_rs',
-                                                                      eval_dataloader=eval_dataloader_hu_rs)
+            # hu_rs_eval_loss, hu_epoch_f1 = model.compute_RS_f1_and_loss_reward(tasktype='hu_rs',
+            #                                                           eval_dataloader=eval_dataloader_hu_rs)
 
-            print('eval hu rs eval loss {}'.format(hu_rs_eval_loss))
-            if hu_rs_eval_loss < max_reward:
-                torch.save(model.state_dict(), args.TST_model_path + '.pt')
-                max_reward = hu_rs_eval_loss
-
-            # mol_linkandrel_loss, _ = model.compute_f1_and_loss_reward(tasktype='parsing',
-            #                                                           eval_dataloader=eval_dataloader_mol)
-           
-            # print('eval mol link loss {}'.format(mol_linkandrel_loss))
-            # total_eval_loss = mol_linkandrel_loss
-            # print('total eval loss {}'.format(total_eval_loss))
-            # if total_eval_loss < max_reward:
+            # print('eval hu rs eval loss {}'.format(hu_rs_eval_loss))
+            # if hu_rs_eval_loss < max_reward:
             #     torch.save(model.state_dict(), args.TST_model_path + '.pt')
-            #     max_reward = total_eval_loss
-            #     max_epoch = epoch
+            #     max_reward = hu_rs_eval_loss
+
+            mol_linkandrel_loss, _ = model.compute_f1_and_loss_reward(tasktype='parsing',
+                                                                      eval_dataloader=eval_dataloader_mol)
+           
+            print('eval mol link loss {}'.format(mol_linkandrel_loss))
+            total_eval_loss = mol_linkandrel_loss
+            print('total eval loss {}'.format(total_eval_loss))
+            if total_eval_loss < max_reward:
+                torch.save(model.state_dict(), args.TST_model_path + '.pt')
+                max_reward = total_eval_loss
+                max_epoch = epoch
 
 
     else:
@@ -754,8 +754,8 @@ if __name__ == '__main__':
         state_dict = torch.load(args.TST_model_path+'.pt')
         model.load_state_dict(state_dict,strict=False)
         model.eval()
-        # total_loss, total_f1 = model.compute_f1_and_loss_reward(tasktype='parsing',
-        #                                                   eval_dataloader=test_dataloader_mol)
+        total_loss, total_f1 = model.compute_f1_and_loss_reward(tasktype='parsing',
+                                                          eval_dataloader=test_dataloader_mol)
         # print('ou_address to')
         # Re, total_f1 = model.compute_Pat1_and_loss_reward(tasktype='ou5_ar',
         #                                                   eval_dataloader=test_dataloader_ou_len5,
