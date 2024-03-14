@@ -15,9 +15,9 @@
 
 | Type     | P@1 R2     | P@1 R10    |description|
 | -------- | -------- | -------- |-------- |
-|with S-BERT | 行1，列2 | 行1，列3 |           |
-|with S-BERT with SSA structure path cat | 行2，列2 | 行2，列3 |
-|with S-BERT only SSA structure path | 行2，列2 | 行2，列3 |
+|S-BERT | 行1，列2 | 行1，列3 |           |
+|S-BERT & SA structure path (cat output of S-bert and path mean pooling) | 行2，列2 | 行2，列3 |
+|S-BERT only SSA structure path | 行2，列2 | 行2，列3 |
 | only SSA structure path | 行3，列2 | 行3，列3 |
 ————————————————
 看起来with S-BERT with SSA structure path cat（cat S-BERT的输出和structure path 的性能最好）
