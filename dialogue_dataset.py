@@ -146,21 +146,40 @@ class DialogueDataset(Dataset):
 
     def __len__(self):
         return len(self.dialogues)
+    
+    def convert_strSpeaker2id(self,speaker_list):
+        spkDic = {}
+        index = 0
+        for spk in speaker_list:
+            if spk not in spkDic:
+                spkDic[spk] = index
+                index += 1
+        speaker_ids = []
+        for spk in speaker_list:
+            speaker_ids.append(spkDic[spk])
+        return speaker_ids
 
     def __getitem__(self, index):
         dialogue = self.dialogues[index]
         texts = [edu['text'] for edu in dialogue['edus']]
         speakers = [edu['speaker'] for edu in dialogue['edus']]
+        speakers_ids = self.convert_strSpeaker2id(speakers)
         new_texts  = []
-        for text, speaker in zip(texts, speakers):
+        new_speaker_ids = []
+        for text, speaker in zip(texts, speakers_ids):
             text_tokens = self.tokenizer.tokenize(text)
             self.__truncate(text_tokens, max_seq_len=self.text_max_sep_len)
             text_tokens = ['[CLS]'] + text_tokens
+            speaker_ids = [speaker]*len(text_tokens)
             new_texts.append(text_tokens)
+            new_speaker_ids.append(speaker_ids)
         total_tokens  = []
-        for item in new_texts:
+        total_speaker_ids = []
+        for speaker_ids, item in zip(new_speaker_ids, new_texts):
+            total_speaker_ids.extend(speaker_ids)
             total_tokens.extend(item)
         total_tokens.append('[SEP]')
+        total_speaker_ids.append(new_speaker_ids[-1][-1])
         segment_ids = [0]*len(total_tokens)
         input_mask = [1] * len(total_tokens)
         gap = self.total_seq_len - len(total_tokens)
@@ -168,9 +187,11 @@ class DialogueDataset(Dataset):
         total_tokens = total_tokens + ['[PAD]'] * gap
         segment_ids = segment_ids + [0] * gap
         input_mask = input_mask + [0] * gap
+        total_speaker_ids = total_speaker_ids + [0]*gap 
         assert len(total_tokens) == self.total_seq_len
         assert len(segment_ids) == self.total_seq_len
         assert len(input_mask) == self.total_seq_len
+        assert len(total_speaker_ids) == self.total_seq_len
         temp_sep_index_list = []
         for index, token in enumerate(total_tokens):
             if token == '[CLS]':
@@ -179,6 +200,7 @@ class DialogueDataset(Dataset):
         total_tokens = torch.LongTensor(total_tokens)
         segment_ids = torch.LongTensor(segment_ids)
         input_mask = torch.FloatTensor(input_mask)
+        total_speaker_ids = torch.LongTensor(total_speaker_ids)
         graph = dialogue['graph']
         paths = graph.paths
         pairs = graph.pairs
@@ -186,7 +208,7 @@ class DialogueDataset(Dataset):
         turns = graph.turn_paths.tolist()
         if 'id' not in dialogue:
             dialogue['id'] = 'none'
-        return total_tokens, input_mask, segment_ids,'', temp_sep_index_list, pairs, paths, speakers, turns, graph.edu_num, dialogue['id']
+        return total_tokens, input_mask, segment_ids, total_speaker_ids, temp_sep_index_list, pairs, paths, speakers, turns, graph.edu_num, dialogue['id']
 
 
 

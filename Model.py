@@ -435,12 +435,12 @@ class PolicyNetwork(nn.Module):
         }
         accum_eval_link_loss, accum_eval_label_loss = [], []
         for batch in eval_dataloader:
-            texts, input_mask, segment_ids, labels, sep_index, pairs, graphs, speakers, turns, edu_nums,ids = batch
-            texts, input_mask, segment_ids, graphs, speakers, turns, edu_nums = \
-                texts.cuda(), input_mask.cuda(), segment_ids.cuda(), graphs.cuda(), speakers.cuda(), turns.cuda(), edu_nums.cuda()
+            texts, input_mask, segment_ids, speaker_ids, sep_index, pairs, graphs, speakers, turns, edu_nums,ids = batch
+            texts, input_mask, segment_ids, speaker_ids, graphs, speakers, turns, edu_nums = \
+                texts.cuda(), input_mask.cuda(), segment_ids.cuda(), speaker_ids.cuda(), graphs.cuda(), speakers.cuda(), turns.cuda(), edu_nums.cuda()
             mask = get_mask(node_num=edu_nums + 1, max_edu_dist=self.args.max_edu_dist).cuda()
             with torch.no_grad():
-                link_scores, label_scores = self.critic.task_output(tasktype, texts, input_mask, segment_ids,  sep_index,
+                link_scores, label_scores = self.critic.task_output(tasktype, texts, input_mask, segment_ids, speaker_ids, sep_index,
                                                                 edu_nums, speakers, turns)
 
             eval_link_loss, eval_label_loss = compute_loss(link_scores, label_scores, graphs, mask)
@@ -558,6 +558,9 @@ class PolicyNetwork(nn.Module):
                 label_loss = label_loss.mean()
                 loss = link_loss
             elif task_type =='parsing':
+                link_loss, label_loss = compute_loss(link_scores.clone(), label_scores.clone(), graphs, mask )
+                link_loss = link_loss.mean()
+                label_loss = label_loss.mean()
                 loss = link_loss + label_loss
             self.critic.task_model.zero_grad()
             loss.backward()
@@ -751,7 +754,8 @@ class PathEmbedding(nn.Module):
         turn = self.turn(turn)
         position = self.position(self.path_pool[:node_num, :node_num].cuda())
         position = position.expand(batch_size, node_num, node_num, position.size(-1))
-        return torch.cat((speaker, turn, position), dim=-1)
+        # return torch.cat((speaker, turn, position), dim=-1)
+        return torch.cat((turn, turn, position), dim=-1)
 
 class Classifier(nn.Module):
     def __init__(self, input_size, hidden_size, num_class):
