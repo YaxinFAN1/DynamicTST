@@ -664,11 +664,11 @@ if __name__ == '__main__':
         # train_dataloader_hu = DataLoader(dataset=train_dataset_hu, batch_size=args.hu_pool_size, shuffle=True,
         #                                     collate_fn=train_collate_fn_hu)
 
-        train_dataloader_hu_rs =   DataLoader(dataset=train_dataset_hu_rs, batch_size=args.hu_pool_size,
+        train_dataloader_hu_rs =   DataLoader(dataset=train_hu_rs_file, batch_size=args.hu_pool_size,
                                                shuffle=True,
                                                collate_fn=train_collate_fn_hu)
         
-        eval_dataloader_hu_rs =   DataLoader(dataset=eval_dataset_hu_rs, batch_size=args.hu_pool_size,
+        eval_dataloader_hu_rs =   DataLoader(dataset=eval_hu_rs_file, batch_size=args.hu_pool_size,
                                                shuffle=False,
                                                collate_fn=eval_collate_fn_mol)
         train_dataloader_hu = ''  
