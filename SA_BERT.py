@@ -16,12 +16,16 @@ import torch
 from torch import nn
 from transformers import BertModel, BertTokenizer
 
+import torch
+from torch import nn
+from transformers import BertModel, BertTokenizer
+
 class BertWithSpeakerID(nn.Module):
-    def __init__(self, bert_model_name, speaker_id_dim, num_speakers):
+    def __init__(self, bert_model_name, speaker_id_dim, num_speakers, with_spk_embedding):
         super(BertWithSpeakerID, self).__init__()
         self.bert = BertModel.from_pretrained(bert_model_name)
         self.speaker_embeddings = nn.Embedding(num_speakers, speaker_id_dim)
-        
+        self.with_spk_embedding = with_spk_embedding
         # 假设BERT的hidden_size与speaker_id_dim一致
         self.embedding_size = self.bert.config.hidden_size
 
@@ -33,10 +37,12 @@ class BertWithSpeakerID(nn.Module):
         
         # 获取speaker_id embeddings
         speaker_embeds = self.speaker_embeddings(speaker_ids)
-
+        
+        if self.with_spk_embedding:
         # 将所有embeddings相加
-        embeddings = inputs_embeds + token_type_embeddings + position_embeddings + speaker_embeds
-
+            embeddings = inputs_embeds + token_type_embeddings + position_embeddings + speaker_embeds
+        else:
+            embeddings = inputs_embeds + token_type_embeddings + position_embeddings
         # 继续进行BERT的剩余部分
         outputs = self.bert(inputs_embeds =embeddings, attention_mask=attention_mask)
         return outputs

@@ -42,6 +42,6 @@ CUDA_VISIBLE_DEVICES=${GPU}  nohup python -u main.py \
                                     --hu_batch_size 1024 \
                                     --dataset_dir=$dataset_dir  \
                                     --do_train \
-                                    --ST_model_path "${model_dir}/hu_rs_SABertCatStrucPath" \
-                                    --TST_model_path "${model_dir}/hu_rs_SABertCatStrucPath" \
-                                    --seed 65534 >./logs/hu_rs_SABertCatStrucPath.log 2>&1 &
+                                    --ST_model_path "${model_dir}/hu_rs_onlyStrucPath" \
+                                    --TST_model_path "${model_dir}/hu_rs_onlyStrucPath" \
+                                    --seed 65534 >./logs/hu_rs_onlyStrucPath.log 2>&1 &

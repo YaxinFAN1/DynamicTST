@@ -108,6 +108,7 @@ if __name__ == '__main__':
     parser.add_argument('--hdim', type=int, default= 384)
     parser.add_argument('--debug', action="store_true")
     parser.add_argument('--seed', type=int, default= 512)
+    parser.add_argument('--with_spk_embedding', action="store_true")
     args = parser.parse_args()
     seed_everything(args.seed)
     args.n_gpu = torch.cuda.device_count()
@@ -688,7 +689,9 @@ if __name__ == '__main__':
         train_dataloader_ou15 = ''
         #TST
         args.TST_Learning_Mode = False
-        pretrained_model = BertWithSpeakerID(args.model_name_or_path, args.hidden_size, args.num_speakers) # bert_model_name, speaker_id_dim, num_speakers 
+        print('args.with_spk_embedding')
+        print(args.with_spk_embedding)
+        pretrained_model = BertWithSpeakerID(args.model_name_or_path, args.hidden_size, args.num_speakers, args.with_spk_embedding) # bert_model_name, speaker_id_dim, num_speakers 
         model = PolicyNetwork(args=args, pretrained_model=pretrained_model)
         model = model.to(args.device)
         # state_dict = torch.load(args.ST_model_path+'.pt')
