@@ -309,7 +309,6 @@ class RSdataset(Dataset):
         label_map = {}
         for (i, label) in enumerate(self.label_list):  # ['0', '1']
             label_map[label] = i
-
         example = self.dataset[index]
         # (i, ctx, ctx_spk, i, rsp, rsp_spk, 'follow') 正例
         # (i, ctx, ctx_spk, n_id, rsp_list[n_id], rsp_spk, 'unfollow') 负例
@@ -317,15 +316,22 @@ class RSdataset(Dataset):
         texts = example[1] + [example[4]] # context + response
         speakers = example[2] + [example[5]] # ctx_spk + res_spk
         new_texts  = []
+        new_speaker_ids = []
+        speakers = [int(a)-1 for a in speakers]
         for text, speaker in zip(texts, speakers):
             text_tokens = self.tokenizer.tokenize(text)
             self.__truncate(text_tokens, max_seq_len=self.text_max_sep_len)
             text_tokens = ['[CLS]'] + text_tokens
+            speaker_ids = [speaker]*len(text_tokens)
             new_texts.append(text_tokens)
+            new_speaker_ids.append(speaker_ids)
         total_tokens  = []
-        for item in new_texts:
+        total_speaker_ids = []
+        for speaker_ids, item in zip(new_speaker_ids ,new_texts):
+            total_speaker_ids.extend(speaker_ids)
             total_tokens.extend(item)
         total_tokens.append('[SEP]')
+        total_speaker_ids.append(new_speaker_ids[-1][-1])
         segment_ids = [0]*len(total_tokens)
         input_mask = [1] * len(total_tokens)
         gap = self.total_seq_len - len(total_tokens)
@@ -333,9 +339,11 @@ class RSdataset(Dataset):
         total_tokens = total_tokens + ['[PAD]'] * gap
         segment_ids = segment_ids + [0] * gap
         input_mask = input_mask + [0] * gap
+        total_speaker_ids = total_speaker_ids + [0]*gap 
         assert len(total_tokens) == self.total_seq_len
         assert len(segment_ids) == self.total_seq_len
         assert len(input_mask) == self.total_seq_len
+        assert len(total_speaker_ids) == self.total_seq_len
         temp_sep_index_list = []
         for index, token in enumerate(total_tokens):
             if token == '[CLS]':
@@ -344,11 +352,12 @@ class RSdataset(Dataset):
         total_tokens = torch.LongTensor(total_tokens)
         segment_ids = torch.LongTensor(segment_ids)
         input_mask = torch.FloatTensor(input_mask)
+        total_speaker_ids = torch.LongTensor(total_speaker_ids)
         paths = ''
         pairs = ''
         speakers = self.get_speaker_paths(texts, speakers).tolist()
         turns = self.get_turn_paths(texts, speakers).tolist()
         ex_id = self.filetype + '_ctxid_{}_resid_{}'.format(example[0], example[3])
         label_id = label_map[example[-1]]
-        return total_tokens, input_mask, segment_ids, '', temp_sep_index_list, pairs, label_id, speakers, turns, len(texts), ex_id
+        return total_tokens, input_mask, segment_ids, total_speaker_ids, temp_sep_index_list, pairs, label_id, speakers, turns, len(texts), ex_id
 

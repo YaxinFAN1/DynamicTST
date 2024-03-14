@@ -13,8 +13,11 @@ class BaseNetwork(nn.Module):
         super(BaseNetwork, self).__init__()
         self.pretrained_model = pretrained_model
 
-    def forward(self, texts, input_mask, segment_ids):
-        output = self.pretrained_model(texts,input_mask, segment_ids)
+    def forward(self, texts, input_mask, segment_ids,speaker_ids):
+        output = self.pretrained_model(input_ids = texts,
+                             attention_mask = input_mask, 
+                             token_type_ids = segment_ids,
+                            speaker_ids = speaker_ids)
         return output
 
 class ParsingTask(nn.Module):
@@ -76,8 +79,8 @@ class TaskSpecificNetwork1(nn.Module):
         self.Ou10RSNetwork = RSTask(params)
         self.Ou15RSNetwork = RSTask(params)
 
-    def forward(self, tasktype, texts,input_mask, segment_ids, sep_index_list, edu_nums, speakers, turns):
-        rep_x = self.base_network(texts, input_mask,  segment_ids)
+    def forward(self, tasktype, texts,input_mask, segment_ids, speaker_ids, sep_index_list, edu_nums, speakers, turns):
+        rep_x = self.base_network(texts, input_mask,  segment_ids,speaker_ids)
         predict_path, batch, node_num = self.SSAModule(rep_x, sep_index_list,
                                     edu_nums, speakers, turns)
         if tasktype == 'parsing':
@@ -144,8 +147,8 @@ class CriticNetwork(nn.Module):
         out = torch.mean(out)
         return x_out, out
 
-    def task_output(self, tasktype, texts, input_mask, segment_ids, sep_index_list, edu_nums, speakers, turns):
-        return self.task_model(tasktype, texts, input_mask, segment_ids, sep_index_list, edu_nums, speakers, turns)
+    def task_output(self, tasktype, texts, input_mask, segment_ids, speaker_ids,  sep_index_list, edu_nums, speakers, turns):
+        return self.task_model(tasktype, texts, input_mask, segment_ids, speaker_ids, sep_index_list, edu_nums, speakers, turns)
 
 class PolicyNetwork(nn.Module):
     def __init__(self, args, pretrained_model):
@@ -286,8 +289,8 @@ class PolicyNetwork(nn.Module):
     def set_gradient_mask(self, mask, type):
         self.task_optims[type].set_gradient_mask(mask)
 
-    def forward(self, batch_x, text_mask, segmend_ids):
-        batch_rep, exp_reward = self.critic(batch_x, text_mask, segmend_ids)
+    def forward(self, batch_x, text_mask, segmend_ids,speaker_ids):
+        batch_rep, exp_reward = self.critic(batch_x, text_mask, segmend_ids, speaker_ids)
         action_probs = self.actor(batch_rep)
         return action_probs, batch_rep, exp_reward
     
@@ -364,13 +367,13 @@ class PolicyNetwork(nn.Module):
         labels_all_label1 \
             = np.array([], dtype=int)
         for batch in tqdm(eval_dataloader):
-            texts, input_mask, segment_ids, _, sep_index_list, pairs, graphs,speakers, turns, edu_nums, ids = batch
-            texts, labels, speakers, turns, edu_nums = texts.cuda(), graphs.cuda(), speakers.cuda(), turns.cuda(), edu_nums.cuda()
+            texts, input_mask, segment_ids, speaker_ids, sep_index_list, pairs, graphs,speakers, turns, edu_nums, ids = batch
+            texts, labels, speaker_ids, speakers, turns, edu_nums = texts.cuda(), graphs.cuda(), speaker_ids.cuda(), speakers.cuda(), turns.cuda(), edu_nums.cuda()
             input_mask = input_mask.cuda()
             segment_ids = segment_ids.cuda()
 
             with torch.no_grad():
-                scores, _ = self.critic.task_output(tasktype, texts, input_mask, segment_ids,  sep_index_list,
+                scores, _ = self.critic.task_output(tasktype, texts, input_mask, segment_ids, speaker_ids, sep_index_list,
                                                                 edu_nums, speakers, turns)
             loss = self.loss_fns[tasktype](scores, labels)
             predict_label1 = torch.max(scores.data, 1)[1].cpu().numpy()
@@ -539,11 +542,11 @@ class PolicyNetwork(nn.Module):
     def train_minibatch(self, task_type, batch):
         accum_train_link_loss = accum_train_label_loss = 0
         for mini_batch in batch:
-            texts, input_mask, segment_ids, _, sep_index, pairs, graphs, speakers, turns, edu_nums = mini_batch
-            texts, input_mask, segment_ids, graphs, speakers, turns, edu_nums = \
-                    texts.cuda(), input_mask.cuda(), segment_ids.cuda(), graphs.cuda(), speakers.cuda(), turns.cuda(), edu_nums.cuda()
+            texts, input_mask, segment_ids, speaker_ids, sep_index, pairs, graphs, speakers, turns, edu_nums = mini_batch
+            texts, input_mask, segment_ids, speaker_ids, graphs, speakers, turns, edu_nums = \
+                    texts.cuda(), input_mask.cuda(), segment_ids.cuda(), speaker_ids.cuda(), graphs.cuda(), speakers.cuda(), turns.cuda(), edu_nums.cuda()
             mask = get_mask(node_num=edu_nums + 1, max_edu_dist=self.args.max_edu_dist).cuda()
-            link_scores, label_scores = self.critic.task_output(task_type, texts, input_mask, segment_ids,  sep_index,
+            link_scores, label_scores = self.critic.task_output(task_type, texts, input_mask, segment_ids, speaker_ids,  sep_index,
                                                                 edu_nums, speakers, turns)
             if task_type == 'hu_rs' or task_type == 'ou5_rs' or task_type == 'ou10_rs' or task_type == 'ou15_rs':
                 link_loss = self.loss_fns[task_type](link_scores, graphs)
