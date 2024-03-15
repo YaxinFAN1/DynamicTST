@@ -24,3 +24,16 @@
 
 实验结果表明还是凭借s-bert的输出和ssa 输出的structure path 的平均池化的拼接效果最好。只使用SSA structure path的效果最差
 
+# parsing
+ 
+ Sabert + SSA很难识别关系，only sabert效果好一些，但是也很差 基本rel 性能是70不到
+
+ 最后还得是BERT+GRU+SSA
+ 
+ bert SSA with GRU
+
+ bert SSA without GRU
+ 80.38 57.22
+ 80.47 57.00
+
+ # 加不加GRU几乎没啥影响

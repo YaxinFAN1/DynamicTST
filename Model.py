@@ -486,12 +486,12 @@ class PolicyNetwork(nn.Module):
         }
         accum_eval_link_loss, accum_eval_label_loss = [], []
         for batch in eval_dataloader:
-            texts, input_mask, segment_ids, labels, sep_index, pairs, graphs, speakers, turns, edu_nums,ids = batch
-            texts, input_mask, segment_ids, graphs, speakers, turns, edu_nums = \
-                texts.cuda(), input_mask.cuda(), segment_ids.cuda(), graphs.cuda(), speakers.cuda(), turns.cuda(), edu_nums.cuda()
+            texts, input_mask, segment_ids, speaker_ids, sep_index, pairs, graphs, speakers, turns, edu_nums,ids = batch
+            texts, input_mask, segment_ids,speaker_ids, graphs, speakers, turns, edu_nums = \
+                texts.cuda(), input_mask.cuda(), segment_ids.cuda(),speaker_ids.cuda(), graphs.cuda(), speakers.cuda(), turns.cuda(), edu_nums.cuda()
             mask = get_mask(node_num=edu_nums + 1, max_edu_dist=self.args.max_edu_dist).cuda()
             with torch.no_grad():
-                link_scores, label_scores = self.critic.task_output(tasktype, texts, input_mask, segment_ids,  sep_index,
+                link_scores, label_scores = self.critic.task_output(tasktype, texts, input_mask, segment_ids, speaker_ids, sep_index,
                                                                 edu_nums, speakers, turns)
 
             eval_link_loss, eval_label_loss = compute_loss(link_scores, label_scores, graphs, mask)
@@ -667,7 +667,8 @@ class SSAModule(nn.Module):
     def __init__(self, params):
         super(SSAModule, self).__init__()
         self.params = params
-        self.gru = nn.GRU(params.hidden_size, params.hidden_size // 2, batch_first=True, bidirectional=True)
+        if self.params.with_GRU:
+            self.gru = nn.GRU(params.hidden_size, params.hidden_size // 2, batch_first=True, bidirectional=True)
         self.path_emb = PathEmbedding(params)
         self.path_update = PathUpdateModel(params)
         self.gnn = StructureAwareAttention(params.hidden_size, params.path_hidden_size, params.num_heads,
@@ -713,8 +714,9 @@ class SSAModule(nn.Module):
         sentences = self.__fetch_sep_rep2(sentences, pad_sep_index_list)
         nodes = torch.cat((self.root.expand(batch_size, 1, sentences.size(-1)),
                            sentences.reshape(batch_size, edu_num, -1)), dim=1)
-        dialogue, _ = self.gru(nodes)
-        nodes = self.dropout(dialogue)
+        if self.params.with_GRU:
+            nodes, _ = self.gru(nodes)
+        nodes = self.dropout(nodes)
         edu_nums = edu_nums + 1
 
         edu_attn_mask = torch.arange(edu_nums.max()).expand(len(edu_nums), edu_nums.max()).cuda() < edu_nums.unsqueeze(

@@ -112,6 +112,7 @@ if __name__ == '__main__':
     parser.add_argument('--only_SABERT', action="store_true")
     parser.add_argument('--only_BERT', action="store_true")
     parser.add_argument('--cat_cls_structurePath', action="store_true")
+    parser.add_argument('--with_GRU', action="store_true")
     
     args = parser.parse_args()
     seed_everything(args.seed)
@@ -322,16 +323,17 @@ if __name__ == '__main__':
             for bucket in buckets:
                 batch = d[bucket[0]:bucket[1]]
 
-                texts, input_mask, segment_ids, _,sep_index, pairs,graphs, speakers, turns, edu_nums, _ = zip(*batch)
+                texts, input_mask, segment_ids, speaker_ids,sep_index, pairs,graphs, speakers, turns, edu_nums, _ = zip(*batch)
                 texts = torch.stack(texts, dim=0)
                 segment_ids = torch.stack(segment_ids, dim=0)
                 input_mask = torch.stack(input_mask, dim=0)
+                speaker_ids = torch.stack(speaker_ids, dim=0)
                 assert texts.shape[0] == segment_ids.shape[0] == input_mask.shape[0] == len(sep_index)
                 speakers = ints_to_tensor(list(speakers))
                 turns = ints_to_tensor(list(turns))
                 graphs = ints_to_tensor(list(graphs))
                 edu_nums = torch.tensor(edu_nums)
-                yield texts, input_mask, segment_ids, _, sep_index,pairs, graphs, speakers, turns, edu_nums
+                yield texts, input_mask, segment_ids, speaker_ids, sep_index,pairs, graphs, speakers, turns, edu_nums
 
         return pool(examples)
 
@@ -767,12 +769,12 @@ if __name__ == '__main__':
         state_dict = torch.load(args.TST_model_path+'.pt')
         model.load_state_dict(state_dict,strict=False)
         model.eval()
-        # total_loss, total_f1 = model.compute_f1_and_loss_reward(tasktype='parsing',
-        #                                                   eval_dataloader=test_dataloader_mol)
+        total_loss, total_f1 = model.compute_f1_and_loss_reward(tasktype='parsing',
+                                                          eval_dataloader=test_dataloader_mol)
         # print('ou_address to')
         # Re, total_f1 = model.compute_Pat1_and_loss_reward(tasktype='ou5_ar',
         #                                                   eval_dataloader=test_dataloader_ou_len5,
         #                                                   source_file=args.test_ou_len5_file)
 
-        hu_rs_eval_loss, hu_epoch_f1 = model.compute_RS_f1_and_loss_reward(tasktype='hu_rs',
-                                                            eval_dataloader=test_dataloader_hu_rs)
+        # hu_rs_eval_loss, hu_epoch_f1 = model.compute_RS_f1_and_loss_reward(tasktype='hu_rs',
+        #                                                     eval_dataloader=test_dataloader_hu_rs)
