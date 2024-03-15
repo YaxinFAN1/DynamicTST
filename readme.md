@@ -21,3 +21,6 @@
 | only SSA structure path | 行3，列2 | 行3，列3 |
 ————————————————
 看起来with S-BERT with SSA structure path cat（cat S-BERT的输出和structure path 的性能最好）
+
+实验结果表明还是凭借s-bert的输出和ssa 输出的structure path 的平均池化的拼接效果最好。只使用SSA structure path的效果最差
+
