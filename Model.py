@@ -13,8 +13,11 @@ class BaseNetwork(nn.Module):
         super(BaseNetwork, self).__init__()
         self.pretrained_model = pretrained_model
 
-    def forward(self, texts, input_mask, segment_ids):
-        output = self.pretrained_model(texts,input_mask, segment_ids)
+    def forward(self, texts, input_mask, segment_ids,speaker_ids):
+        output = self.pretrained_model(input_ids = texts,
+                             attention_mask = input_mask, 
+                             token_type_ids = segment_ids,
+                            speaker_ids = speaker_ids)
         return output
 
 class ParsingTask(nn.Module):
@@ -49,16 +52,55 @@ class RSTask(nn.Module):
     def __init__(self, params):
         super(RSTask, self).__init__()
         self.params = params
-        self.classifier = nn.Linear(params.hidden_size, 2)
-        self.link_classifier = Classifier(params.path_hidden_size * 2, params.path_hidden_size,
-                                          1)
-        self.label_classifier = Classifier(params.path_hidden_size * 2,
-                                           params.path_hidden_size,
-                                           params.relation_type_num)
+        if params.with_spk_embedding:
+            self.classifier = nn.Linear(params.hidden_size + params.path_hidden_size, 2)
+        else:
+            self.classifier = nn.Linear(params.path_hidden_size, 2)
+        self.root = nn.Parameter(torch.zeros(params.hidden_size), requires_grad=False)
+
+    def __fetch_sep_rep2(self, ten_output, seq_index):
+        batch, seq_len, hidden_size = ten_output.shape
+        shift_sep_index_list = self.get_shift_sep_index_list(seq_index, seq_len)
+        ten_output = torch.reshape(ten_output, (batch * seq_len, hidden_size))
+        sep_embedding = ten_output[shift_sep_index_list, :]
+        sep_embedding = torch.reshape(sep_embedding, (batch, len(seq_index[0]), hidden_size))
+        return sep_embedding
+
+    def get_shift_sep_index_list(self, pad_sep_index_list, seq_len):
+        new_pad_sep_index_list = []
+        for index in range(len(pad_sep_index_list)):
+            new_pad_sep_index_list.extend([item + index * seq_len for item in pad_sep_index_list[index]])
+        return new_pad_sep_index_list
+
+    def padding_sep_index_list(self, sep_index_list):
+
+        max_edu = max([len(a) for a in sep_index_list])
+        total_new_sep_index_list = []
+        for index_list in sep_index_list:
+            new_sep_index_list = []
+            gap = max_edu - len(index_list)
+            new_sep_index_list.extend(index_list)
+            for i in range(gap):
+                new_sep_index_list.append(index_list[-1])
+            total_new_sep_index_list.append(new_sep_index_list)
+        return max_edu, total_new_sep_index_list
       
-    def forward(self, cls_embedding, predicted_path, batch_size, node_num):
-        return self.classifier(cls_embedding[0][:,0,:]),  \
-               self.label_classifier(predicted_path)
+    def forward(self, cls_embedding, predicted_path, sep_index_list):
+        batch_size = cls_embedding[0].shape[0]
+        edu_num, pad_sep_index_list = self.padding_sep_index_list(sep_index_list)
+        node_num = edu_num + 1
+        sentences = self.__fetch_sep_rep2(cls_embedding[0], pad_sep_index_list)
+        nodes = torch.cat((self.root.expand(batch_size, 1, sentences.size(-1)),
+                           sentences.reshape(batch_size, edu_num, -1)), dim=1)
+        # 池化predicted_path 
+        predicted_path = torch.mean(predicted_path, dim=2)
+        if self.params.with_spk_embedding:
+            output = torch.cat((nodes, predicted_path),dim=-1)
+        else:
+            output = predicted_path
+        # 拼接cls_embedding,structure path
+        return self.classifier(output[:,0,:]),  \
+               ''
     # self.link_classifier(predicted_path).reshape(batch_size, node_num, node_num),
 
 class TaskSpecificNetwork1(nn.Module):
@@ -76,9 +118,9 @@ class TaskSpecificNetwork1(nn.Module):
         self.Ou10RSNetwork = RSTask(params)
         self.Ou15RSNetwork = RSTask(params)
 
-    def forward(self, tasktype, texts,input_mask, segment_ids, sep_index_list, edu_nums, speakers, turns):
-        rep_x = self.base_network(texts, input_mask,  segment_ids)
-        predict_path, batch, node_num = self.SSAModule(rep_x, sep_index_list,
+    def forward(self, tasktype, texts,input_mask, segment_ids, speaker_ids, sep_index_list, edu_nums, speakers, turns):
+        rep_x = self.base_network(texts, input_mask,  segment_ids,speaker_ids)
+        predict_path, structure_path, batch, node_num = self.SSAModule(rep_x, sep_index_list,
                                     edu_nums, speakers, turns)
         if tasktype == 'parsing':
             link_scores, label_scores = \
@@ -101,16 +143,16 @@ class TaskSpecificNetwork1(nn.Module):
                 self.Ou15ARNetwork(predict_path, batch, node_num)
             output = (link_scores, label_scores)
         elif tasktype == 'hu_rs':
-            scores,  label_scores = self.HuRSNetwork(rep_x, predict_path, batch, node_num)
+            scores,  label_scores = self.HuRSNetwork(rep_x, structure_path, sep_index_list)
             output = (scores, label_scores)
         elif tasktype == 'ou5_rs':
-            scores,   label_scores = self.Ou5RSNetwork(rep_x, predict_path, batch, node_num)
+            scores,   label_scores = self.Ou5RSNetwork(rep_x, structure_path, sep_index_list)
             output = (scores, label_scores)
         elif tasktype == 'ou10_rs':
-            scores,   label_scores = self.Ou10RSNetwork(rep_x, predict_path, batch, node_num)
+            scores,   label_scores = self.Ou10RSNetwork(rep_x, structure_path, sep_index_list)
             output = (scores, label_scores)
         elif tasktype == 'ou15_rs':
-            scores,  label_scores = self.Ou15RSNetwork(rep_x, predict_path, batch, node_num)
+            scores,  label_scores = self.Ou15RSNetwork(rep_x, structure_path, sep_index_list)
             output = (scores, label_scores)
         return output
 
@@ -144,8 +186,8 @@ class CriticNetwork(nn.Module):
         out = torch.mean(out)
         return x_out, out
 
-    def task_output(self, tasktype, texts, input_mask, segment_ids, sep_index_list, edu_nums, speakers, turns):
-        return self.task_model(tasktype, texts, input_mask, segment_ids, sep_index_list, edu_nums, speakers, turns)
+    def task_output(self, tasktype, texts, input_mask, segment_ids, speaker_ids,  sep_index_list, edu_nums, speakers, turns):
+        return self.task_model(tasktype, texts, input_mask, segment_ids, speaker_ids, sep_index_list, edu_nums, speakers, turns)
 
 class PolicyNetwork(nn.Module):
     def __init__(self, args, pretrained_model):
@@ -286,8 +328,8 @@ class PolicyNetwork(nn.Module):
     def set_gradient_mask(self, mask, type):
         self.task_optims[type].set_gradient_mask(mask)
 
-    def forward(self, batch_x, text_mask, segmend_ids):
-        batch_rep, exp_reward = self.critic(batch_x, text_mask, segmend_ids)
+    def forward(self, batch_x, text_mask, segmend_ids,speaker_ids):
+        batch_rep, exp_reward = self.critic(batch_x, text_mask, segmend_ids, speaker_ids)
         action_probs = self.actor(batch_rep)
         return action_probs, batch_rep, exp_reward
     
@@ -364,13 +406,13 @@ class PolicyNetwork(nn.Module):
         labels_all_label1 \
             = np.array([], dtype=int)
         for batch in tqdm(eval_dataloader):
-            texts, input_mask, segment_ids, _, sep_index_list, pairs, graphs,speakers, turns, edu_nums, ids = batch
-            texts, labels, speakers, turns, edu_nums = texts.cuda(), graphs.cuda(), speakers.cuda(), turns.cuda(), edu_nums.cuda()
+            texts, input_mask, segment_ids, speaker_ids, sep_index_list, pairs, graphs,speakers, turns, edu_nums, ids = batch
+            texts, labels, speaker_ids, speakers, turns, edu_nums = texts.cuda(), graphs.cuda(), speaker_ids.cuda(), speakers.cuda(), turns.cuda(), edu_nums.cuda()
             input_mask = input_mask.cuda()
             segment_ids = segment_ids.cuda()
 
             with torch.no_grad():
-                scores, _ = self.critic.task_output(tasktype, texts, input_mask, segment_ids,  sep_index_list,
+                scores, _ = self.critic.task_output(tasktype, texts, input_mask, segment_ids, speaker_ids, sep_index_list,
                                                                 edu_nums, speakers, turns)
             loss = self.loss_fns[tasktype](scores, labels)
             predict_label1 = torch.max(scores.data, 1)[1].cpu().numpy()
@@ -539,11 +581,11 @@ class PolicyNetwork(nn.Module):
     def train_minibatch(self, task_type, batch):
         accum_train_link_loss = accum_train_label_loss = 0
         for mini_batch in batch:
-            texts, input_mask, segment_ids, _, sep_index, pairs, graphs, speakers, turns, edu_nums = mini_batch
-            texts, input_mask, segment_ids, graphs, speakers, turns, edu_nums = \
-                    texts.cuda(), input_mask.cuda(), segment_ids.cuda(), graphs.cuda(), speakers.cuda(), turns.cuda(), edu_nums.cuda()
+            texts, input_mask, segment_ids, speaker_ids, sep_index, pairs, graphs, speakers, turns, edu_nums = mini_batch
+            texts, input_mask, segment_ids, speaker_ids, graphs, speakers, turns, edu_nums = \
+                    texts.cuda(), input_mask.cuda(), segment_ids.cuda(), speaker_ids.cuda(), graphs.cuda(), speakers.cuda(), turns.cuda(), edu_nums.cuda()
             mask = get_mask(node_num=edu_nums + 1, max_edu_dist=self.args.max_edu_dist).cuda()
-            link_scores, label_scores = self.critic.task_output(task_type, texts, input_mask, segment_ids,  sep_index,
+            link_scores, label_scores = self.critic.task_output(task_type, texts, input_mask, segment_ids, speaker_ids,  sep_index,
                                                                 edu_nums, speakers, turns)
             if task_type == 'hu_rs' or task_type == 'ou5_rs' or task_type == 'ou10_rs' or task_type == 'ou15_rs':
                 link_loss = self.loss_fns[task_type](link_scores, graphs)
@@ -673,7 +715,7 @@ class SSAModule(nn.Module):
             struct_path = self.path_update(nodes, const_path, struct_path)
             struct_path = self.dropout(struct_path)
         predicted_path = torch.cat((struct_path, struct_path.transpose(1, 2)), -1)
-        return predicted_path, batch_size, node_num
+        return predicted_path,struct_path, batch_size, node_num
 #cited from wang et al 2021
 class StructureAwareAttention(nn.Module):
     def __init__(self, hidden_size, path_hidden_size, head_num, dropout):

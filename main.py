@@ -6,7 +6,7 @@ from torch.utils.data import DataLoader
 from transformers import AutoTokenizer, AutoModel, AdamW
 from Model import PolicyNetwork
 from dialogue_dataset import DialogueDataset, RSdataset
-
+from SA_BERT import BertWithSpeakerID
 from tqdm import tqdm
 import torch.nn.functional as F
 from utils import *
@@ -54,6 +54,7 @@ if __name__ == '__main__':
     parser.add_argument('--max_edu_dist', type=int, default=20)
     parser.add_argument('--path_hidden_size', type=int, default=384)
     parser.add_argument('--hidden_size', type=int, default=768)
+    parser.add_argument('--num_speakers', type=int, default=10)
     parser.add_argument('--num_layers', type=int, default=1)
     parser.add_argument('--num_heads', type=int, default=4)
     parser.add_argument('--dropout', type=float, default=0.5)
@@ -107,6 +108,7 @@ if __name__ == '__main__':
     parser.add_argument('--hdim', type=int, default= 384)
     parser.add_argument('--debug', action="store_true")
     parser.add_argument('--seed', type=int, default= 512)
+    parser.add_argument('--with_spk_embedding', action="store_true")
     args = parser.parse_args()
     seed_everything(args.seed)
     args.n_gpu = torch.cuda.device_count()
@@ -296,7 +298,7 @@ if __name__ == '__main__':
         # torch.save(train_dataset_ou15_rs, train_ou15_rs_file)
         
     args.relation_type_num = len(id2types)
-    pretrained_model = AutoModel.from_pretrained(args.model_name_or_path)
+    # pretrained_model = AutoModel.from_pretrained(args.model_name_or_path)
 
     def train_collate_fn_mol(examples):
 
@@ -330,16 +332,17 @@ if __name__ == '__main__':
         return pool(examples)
 
     def eval_collate_fn_mol(examples):
-        texts, input_mask, segment_ids, _, sep_index,pairs, graphs, speakers, turns, edu_nums, ids = zip(*examples)
+        texts, input_mask, segment_ids, speaker_ids, sep_index,pairs, graphs, speakers, turns, edu_nums, ids = zip(*examples)
         texts = torch.stack(texts, dim=0)
         segment_ids = torch.stack(segment_ids, dim=0)
         input_mask = torch.stack(input_mask, dim=0)
-        assert texts.shape[0] == segment_ids.shape[0] == input_mask.shape[0] == len(sep_index)
+        speaker_ids = torch.stack(speaker_ids, dim=0)
+        assert texts.shape[0] == segment_ids.shape[0] == input_mask.shape[0] == speaker_ids.shape[0] == len(sep_index)
         speakers = ints_to_tensor(list(speakers))
         turns = ints_to_tensor(list(turns))
         graphs = ints_to_tensor(list(graphs))
         edu_nums = torch.tensor(edu_nums)
-        return texts, input_mask, segment_ids, _, sep_index, pairs,graphs, speakers, turns, edu_nums, list(ids)
+        return texts, input_mask, segment_ids, speaker_ids, sep_index, pairs,graphs, speakers, turns, edu_nums, list(ids)
 
     def train_collate_fn_hu(examples):
 
@@ -359,16 +362,19 @@ if __name__ == '__main__':
             for bucket in buckets:
                 batch = d[bucket[0]:bucket[1]]
 
-                texts, input_mask, segment_ids, _,sep_index, pairs,graphs, speakers, turns, edu_nums, _ = zip(*batch)
+                texts, input_mask, segment_ids, speaker_ids, sep_index, pairs,graphs, speakers, turns, edu_nums, _ = zip(*batch)
                 texts = torch.stack(texts, dim=0)
                 segment_ids = torch.stack(segment_ids, dim=0)
                 input_mask = torch.stack(input_mask, dim=0)
-                assert texts.shape[0] == segment_ids.shape[0] == input_mask.shape[0] == len(sep_index)
+                speaker_ids = torch.stack(speaker_ids, dim=0)
+                
+                assert texts.shape[0] == segment_ids.shape[0] == input_mask.shape[0] ==speaker_ids.shape[0] == len(sep_index)
                 speakers = ints_to_tensor(list(speakers))
                 turns = ints_to_tensor(list(turns))
                 graphs = ints_to_tensor(list(graphs))
+
                 edu_nums = torch.tensor(edu_nums)
-                yield texts, input_mask, segment_ids, _, sep_index,pairs, graphs, speakers, turns, edu_nums
+                yield texts, input_mask, segment_ids, speaker_ids, sep_index,pairs, graphs, speakers, turns, edu_nums
 
         return pool(examples)
 
@@ -557,11 +563,11 @@ if __name__ == '__main__':
         N = len(train_dataloader)
         for batch in tqdm(train_dataloader):
             for mini_batch in batch:
-                texts, input_mask, segment_ids, labels, sep_index, pairs, graphs, speakers, turns, edu_nums = mini_batch
-                texts, input_mask, segment_ids, graphs, speakers, turns, edu_nums = \
-                    texts.cuda(), input_mask.cuda(), segment_ids.cuda(), graphs.cuda(), speakers.cuda(), turns.cuda(), edu_nums.cuda()
+                texts, input_mask, segment_ids, speaker_ids, sep_index, pairs, graphs, speakers, turns, edu_nums = mini_batch
+                texts, input_mask, segment_ids, speaker_ids, graphs, speakers, turns, edu_nums = \
+                    texts.cuda(), input_mask.cuda(), segment_ids.cuda(), speaker_ids.cuda(), graphs.cuda(), speakers.cuda(), turns.cuda(), edu_nums.cuda()
                 mask = get_mask(node_num=edu_nums + 1, max_edu_dist=args.max_edu_dist).cuda()
-                link_scores, label_scores = model.critic.task_output(task_type, texts, input_mask, segment_ids,
+                link_scores, label_scores = model.critic.task_output(task_type, texts, input_mask, segment_ids, speaker_ids,
                                                                     sep_index,
                                                                     edu_nums, speakers, turns)
                 link_loss, label_loss = compute_loss(link_scores.clone(), label_scores.clone(), graphs, mask)
@@ -659,11 +665,11 @@ if __name__ == '__main__':
         # train_dataloader_hu = DataLoader(dataset=train_dataset_hu, batch_size=args.hu_pool_size, shuffle=True,
         #                                     collate_fn=train_collate_fn_hu)
 
-        train_dataloader_hu_rs =   DataLoader(dataset=train_dataset_hu_rs, batch_size=args.hu_pool_size,
+        train_dataloader_hu_rs =   DataLoader(dataset=train_hu_rs_file, batch_size=args.hu_pool_size,
                                                shuffle=True,
                                                collate_fn=train_collate_fn_hu)
         
-        eval_dataloader_hu_rs =   DataLoader(dataset=eval_dataset_hu_rs, batch_size=args.hu_pool_size,
+        eval_dataloader_hu_rs =   DataLoader(dataset=eval_hu_rs_file, batch_size=args.hu_pool_size,
                                                shuffle=False,
                                                collate_fn=eval_collate_fn_mol)
         train_dataloader_hu = ''  
@@ -683,6 +689,9 @@ if __name__ == '__main__':
         train_dataloader_ou15 = ''
         #TST
         args.TST_Learning_Mode = False
+        print('args.with_spk_embedding')
+        print(args.with_spk_embedding)
+        pretrained_model = BertWithSpeakerID(args.model_name_or_path, args.hidden_size, args.num_speakers, args.with_spk_embedding) # bert_model_name, speaker_id_dim, num_speakers 
         model = PolicyNetwork(args=args, pretrained_model=pretrained_model)
         model = model.to(args.device)
         # state_dict = torch.load(args.ST_model_path+'.pt')
@@ -748,7 +757,7 @@ if __name__ == '__main__':
         test_dataloader_hu_rs =   DataLoader(dataset=test_dataset_hu_rs, batch_size=args.hu_pool_size,
                                                shuffle=False,
                                                collate_fn=eval_collate_fn_mol)
-        
+        pretrained_model = BertWithSpeakerID(args.model_name_or_path, args.hidden_size, args.num_speakers, args.with_spk_embedding) # bert_model_name, speaker_id_dim, num_speakers 
         model = PolicyNetwork(args=args, pretrained_model=pretrained_model)
         model = model.to(args.device)
         state_dict = torch.load(args.TST_model_path+'.pt')

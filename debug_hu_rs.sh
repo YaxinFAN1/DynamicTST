@@ -22,7 +22,7 @@ if [ ! -d "${model_dir}" ]; then mkdir -p "${model_dir}"; fi
 
 GPU=0
 model_name=model
-CUDA_VISIBLE_DEVICES=${GPU}  nohup python  -u main.py \
+CUDA_VISIBLE_DEVICES=${GPU}  nohup python -u main.py \
                                     --train_mol_file=$train_mol_file \
                                     --eval_mol_file=$eval_mol_file \
                                     --test_mol_file=$test_mol_file \
@@ -42,7 +42,6 @@ CUDA_VISIBLE_DEVICES=${GPU}  nohup python  -u main.py \
                                     --hu_batch_size 1024 \
                                     --dataset_dir=$dataset_dir  \
                                     --do_train \
-                                    --remake_dataset \
-                                    --ST_model_path "${model_dir}/hu_rs_only_bert" \
-                                    --TST_model_path "${model_dir}/hu_rs_only_bert" \
-                                    --seed 65534 > ./logs/hu_rs_only_bert.log 2>&1 &
+                                    --ST_model_path "${model_dir}/hu_rs_onlyStrucPath" \
+                                    --TST_model_path "${model_dir}/hu_rs_onlyStrucPath" \
+                                    --seed 65534 >./logs/hu_rs_onlyStrucPath.log 2>&1 &
