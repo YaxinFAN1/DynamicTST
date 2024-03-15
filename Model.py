@@ -52,10 +52,16 @@ class RSTask(nn.Module):
     def __init__(self, params):
         super(RSTask, self).__init__()
         self.params = params
-        if params.with_spk_embedding:
-            self.classifier = nn.Linear(params.hidden_size + params.path_hidden_size, 2)
+        if self.params.only_SABERT or self.params.only_BERT:# 仅仅使用cls_embedding 进行分类
+            self.classifier = nn.Linear(params.hidden_size, 2)
         else:
-            self.classifier = nn.Linear(params.path_hidden_size, 2)
+            if params.with_spk_embedding:
+                if self.params.cat_cls_structurePath:
+                    self.classifier = nn.Linear(params.hidden_size + params.path_hidden_size, 2)
+                else:
+                     self.classifier = nn.Linear(params.path_hidden_size, 2)
+            else:
+                self.classifier = nn.Linear(params.path_hidden_size, 2)
         self.root = nn.Parameter(torch.zeros(params.hidden_size), requires_grad=False)
 
     def __fetch_sep_rep2(self, ten_output, seq_index):
@@ -94,10 +100,16 @@ class RSTask(nn.Module):
                            sentences.reshape(batch_size, edu_num, -1)), dim=1)
         # 池化predicted_path 
         predicted_path = torch.mean(predicted_path, dim=2)
-        if self.params.with_spk_embedding:
-            output = torch.cat((nodes, predicted_path),dim=-1)
-        else:
-            output = predicted_path
+        if self.params.only_SABERT or self.params.only_BERT:# 仅仅使用cls_embedding 进行分类
+            output  = cls_embedding[0]
+        else: # 仅仅使用structure path的平均池化，或者拼接cls_embedding 和structure path
+            if self.params.with_spk_embedding:
+                if self.params.cat_cls_structurePath:
+                    output = torch.cat((nodes, predicted_path),dim=-1)
+                else:
+                    output = predicted_path
+            else:
+                output = predicted_path
         # 拼接cls_embedding,structure path
         return self.classifier(output[:,0,:]),  \
                ''

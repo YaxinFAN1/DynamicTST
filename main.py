@@ -109,6 +109,10 @@ if __name__ == '__main__':
     parser.add_argument('--debug', action="store_true")
     parser.add_argument('--seed', type=int, default= 512)
     parser.add_argument('--with_spk_embedding', action="store_true")
+    parser.add_argument('--only_SABERT', action="store_true")
+    parser.add_argument('--only_BERT', action="store_true")
+    parser.add_argument('--cat_cls_structurePath', action="store_true")
+    
     args = parser.parse_args()
     seed_everything(args.seed)
     args.n_gpu = torch.cuda.device_count()
@@ -691,7 +695,7 @@ if __name__ == '__main__':
         args.TST_Learning_Mode = False
         print('args.with_spk_embedding')
         print(args.with_spk_embedding)
-        pretrained_model = BertWithSpeakerID(args.model_name_or_path, args.hidden_size, args.num_speakers, args.with_spk_embedding) # bert_model_name, speaker_id_dim, num_speakers 
+        pretrained_model = BertWithSpeakerID(args) # bert_model_name, speaker_id_dim, num_speakers 
         model = PolicyNetwork(args=args, pretrained_model=pretrained_model)
         model = model.to(args.device)
         # state_dict = torch.load(args.ST_model_path+'.pt')
@@ -757,14 +761,14 @@ if __name__ == '__main__':
         test_dataloader_hu_rs =   DataLoader(dataset=test_dataset_hu_rs, batch_size=args.hu_pool_size,
                                                shuffle=False,
                                                collate_fn=eval_collate_fn_mol)
-        pretrained_model = BertWithSpeakerID(args.model_name_or_path, args.hidden_size, args.num_speakers, args.with_spk_embedding) # bert_model_name, speaker_id_dim, num_speakers 
+        pretrained_model = BertWithSpeakerID(args) # bert_model_name, speaker_id_dim, num_speakers 
         model = PolicyNetwork(args=args, pretrained_model=pretrained_model)
         model = model.to(args.device)
         state_dict = torch.load(args.TST_model_path+'.pt')
         model.load_state_dict(state_dict,strict=False)
         model.eval()
-        total_loss, total_f1 = model.compute_f1_and_loss_reward(tasktype='parsing',
-                                                          eval_dataloader=test_dataloader_mol)
+        # total_loss, total_f1 = model.compute_f1_and_loss_reward(tasktype='parsing',
+        #                                                   eval_dataloader=test_dataloader_mol)
         # print('ou_address to')
         # Re, total_f1 = model.compute_Pat1_and_loss_reward(tasktype='ou5_ar',
         #                                                   eval_dataloader=test_dataloader_ou_len5,
