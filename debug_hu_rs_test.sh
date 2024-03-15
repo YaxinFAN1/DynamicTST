@@ -32,7 +32,8 @@ CUDA_VISIBLE_DEVICES=${GPU}   python   main.py \
                                     --hu_pool_size 100 \
                                     --hu_batch_size 1024 \
                                     --dataset_dir=$dataset_dir  \
-                                    --ST_model_path "${model_dir}/hu_rs_only_bert_debug_test_test" \
-                                    --TST_model_path "${model_dir}/hu_rs_only_bert_debug_test_test" \
+                                    --with_spk_embedding \
+                                    --ST_model_path "${model_dir}/hu_rs_SABertCatStrucPath" \
+                                    --TST_model_path "${model_dir}/hu_rs_SABertCatStrucPath" \
                                     --num_layers 1 \
                                     --max_edu_dist 16 

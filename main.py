@@ -757,7 +757,7 @@ if __name__ == '__main__':
         test_dataloader_hu_rs =   DataLoader(dataset=test_dataset_hu_rs, batch_size=args.hu_pool_size,
                                                shuffle=False,
                                                collate_fn=eval_collate_fn_mol)
-        
+        pretrained_model = BertWithSpeakerID(args.model_name_or_path, args.hidden_size, args.num_speakers, args.with_spk_embedding) # bert_model_name, speaker_id_dim, num_speakers 
         model = PolicyNetwork(args=args, pretrained_model=pretrained_model)
         model = model.to(args.device)
         state_dict = torch.load(args.TST_model_path+'.pt')
