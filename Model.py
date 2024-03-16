@@ -125,6 +125,10 @@ class TaskSpecificNetwork1(nn.Module):
         self.Ou5ARNetwork = ARTask(params)
         self.Ou10ARNetwork = ARTask(params)
         self.Ou15ARNetwork = ARTask(params)
+        self.HuSINetwork = ARTask(params)
+        self.Ou5SINetwork = ARTask(params)
+        self.Ou10SINetwork = ARTask(params)
+        self.Ou15SINetwork = ARTask(params)
         self.HuRSNetwork = RSTask(params)
         self.Ou5RSNetwork = RSTask(params)
         self.Ou10RSNetwork = RSTask(params)
@@ -165,6 +169,18 @@ class TaskSpecificNetwork1(nn.Module):
             output = (scores, label_scores)
         elif tasktype == 'ou15_rs':
             scores,  label_scores = self.Ou15RSNetwork(rep_x, structure_path, sep_index_list)
+            output = (scores, label_scores)
+        elif tasktype == 'hu_si':
+            scores,  label_scores = self.HuSINetwork(predict_path, batch, node_num)
+            output = (scores, label_scores)
+        elif tasktype == 'ou5_si':
+            scores,   label_scores = self.Ou5SINetwork(predict_path, batch, node_num)
+            output = (scores, label_scores)
+        elif tasktype == 'ou10_si':
+            scores,   label_scores = self.Ou10SINetwork(predict_path, batch, node_num)
+            output = (scores, label_scores)
+        elif tasktype == 'ou15_si':
+            scores,  label_scores = self.Ou15SINetwork(predict_path, batch, node_num)
             output = (scores, label_scores)
         return output
 
@@ -229,6 +245,27 @@ class PolicyNetwork(nn.Module):
         else:
             self.task_optims['hu_ar'] = AdamW(param_groups, lr=args.learning_rate)
         self.loss_fns['hu_ar'] = nn.CrossEntropyLoss()
+        #hu_si
+        param_groups = [{'params': [p for p in self.critic.task_model.base_network.parameters() if p.requires_grad],
+                         'lr':args.pretrained_model_learning_rate}]
+        param_groups.append(
+            {'params': [p for p in self.critic.task_model.SSAModule.parameters() if p.requires_grad],
+             'lr': args.learning_rate})
+        param_groups.append({'params': [p for p in self.critic.task_model.HuSINetwork.parameters() if p.requires_grad],
+                         'lr':args.learning_rate})
+        if args.TST_Learning_Mode:
+            optimizer_cls = AdamWTSTLearning
+            optimizer_kwargs = {
+                "betas": (.9, .999),
+                "eps": 1e-6,
+            }
+            optimizer_kwargs["lr"] = args.learning_rate
+            optimizer = optimizer_cls(param_groups, **optimizer_kwargs)
+            self.task_optims['hu_si'] = optimizer
+        else:
+            self.task_optims['hu_si'] = AdamW(param_groups, lr=args.learning_rate)
+        self.loss_fns['hu_si'] = nn.CrossEntropyLoss()
+
         #ou5_ar
         param_groups = [{'params': [p for p in self.critic.task_model.base_network.parameters() if p.requires_grad],
                          'lr': args.pretrained_model_learning_rate}]
@@ -250,6 +287,28 @@ class PolicyNetwork(nn.Module):
         else:
             self.task_optims['ou5_ar'] = AdamW(param_groups, lr=args.learning_rate)
         self.loss_fns['ou5_ar'] = nn.CrossEntropyLoss()
+
+        #ou5_si
+        param_groups = [{'params': [p for p in self.critic.task_model.base_network.parameters() if p.requires_grad],
+                         'lr': args.pretrained_model_learning_rate}]
+        param_groups.append(
+            {'params': [p for p in self.critic.task_model.SSAModule.parameters() if p.requires_grad],
+             'lr': args.learning_rate})
+        param_groups.append(
+            {'params': [p for p in self.critic.task_model.Ou5SINetwork.parameters() if p.requires_grad],
+             'lr': args.learning_rate})
+        if args.TST_Learning_Mode:
+            optimizer_cls = AdamWTSTLearning
+            optimizer_kwargs = {
+                "betas": (.9, .999),
+                "eps": 1e-6,
+            }
+            optimizer_kwargs["lr"] = args.learning_rate
+            optimizer = optimizer_cls(param_groups, **optimizer_kwargs)
+            self.task_optims['ou5_si'] = optimizer
+        else:
+            self.task_optims['ou5_si'] = AdamW(param_groups, lr=args.learning_rate)
+        self.loss_fns['ou5_si'] = nn.CrossEntropyLoss()
         #ou10_ar
         param_groups = [{'params': [p for p in self.critic.task_model.base_network.parameters() if p.requires_grad],
                          'lr': args.pretrained_model_learning_rate}]
@@ -271,6 +330,28 @@ class PolicyNetwork(nn.Module):
         else:
             self.task_optims['ou10_ar'] = AdamW(param_groups, lr=args.learning_rate)
         self.loss_fns['ou10_ar'] = nn.CrossEntropyLoss()
+
+        #ou10_si
+        param_groups = [{'params': [p for p in self.critic.task_model.base_network.parameters() if p.requires_grad],
+                         'lr': args.pretrained_model_learning_rate}]
+        param_groups.append(
+            {'params': [p for p in self.critic.task_model.SSAModule.parameters() if p.requires_grad],
+             'lr': args.learning_rate})
+        param_groups.append(
+            {'params': [p for p in self.critic.task_model.Ou10SINetwork.parameters() if p.requires_grad],
+             'lr': args.learning_rate})
+        if args.TST_Learning_Mode:
+            optimizer_cls = AdamWTSTLearning
+            optimizer_kwargs = {
+                "betas": (.9, .999),
+                "eps": 1e-6,
+            }
+            optimizer_kwargs["lr"] = args.learning_rate
+            optimizer = optimizer_cls(param_groups, **optimizer_kwargs)
+            self.task_optims['ou10_si'] = optimizer
+        else:
+            self.task_optims['ou10_si'] = AdamW(param_groups, lr=args.learning_rate)
+        self.loss_fns['ou10_si'] = nn.CrossEntropyLoss()
         #ou15_ar
         param_groups = [{'params': [p for p in self.critic.task_model.base_network.parameters() if p.requires_grad],
                          'lr': args.pretrained_model_learning_rate}]
@@ -292,6 +373,30 @@ class PolicyNetwork(nn.Module):
         else:
             self.task_optims['ou15_ar'] = AdamW(param_groups, lr=args.learning_rate)
         self.loss_fns['ou15_ar'] = nn.CrossEntropyLoss()
+
+
+         #ou15_si
+        param_groups = [{'params': [p for p in self.critic.task_model.base_network.parameters() if p.requires_grad],
+                         'lr': args.pretrained_model_learning_rate}]
+        param_groups.append(
+            {'params': [p for p in self.critic.task_model.SSAModule.parameters() if p.requires_grad],
+             'lr': args.learning_rate})
+        param_groups.append(
+            {'params': [p for p in self.critic.task_model.Ou15SINetwork.parameters() if p.requires_grad],
+             'lr': args.learning_rate})
+        if args.TST_Learning_Mode:
+            optimizer_cls = AdamWTSTLearning
+            optimizer_kwargs = {
+                "betas": (.9, .999),
+                "eps": 1e-6,
+            }
+            optimizer_kwargs["lr"] = args.learning_rate
+            optimizer = optimizer_cls(param_groups, **optimizer_kwargs)
+            self.task_optims['ou15_si'] = optimizer
+        else:
+            self.task_optims['ou15_si'] = AdamW(param_groups, lr=args.learning_rate)
+        self.loss_fns['ou15_si'] = nn.CrossEntropyLoss()
+
         #parsing
         param_groups = [{'params': [p for p in self.critic.task_model.base_network.parameters() if p.requires_grad],
                          'lr': args.pretrained_model_learning_rate}]
@@ -334,6 +439,72 @@ class PolicyNetwork(nn.Module):
         else:
             self.task_optims['hu_rs'] = AdamW(param_groups, lr=args.learning_rate)
         self.loss_fns['hu_rs'] = nn.CrossEntropyLoss()
+        
+
+                # RS ou5
+        param_groups = [{'params': [p for p in self.critic.task_model.base_network.parameters() if p.requires_grad],
+                         'lr':args.pretrained_model_learning_rate}]
+        param_groups.append(
+            {'params': [p for p in self.critic.task_model.SSAModule.parameters() if p.requires_grad],
+             'lr': args.learning_rate})
+        param_groups.append({'params': [p for p in self.critic.task_model.Ou5RSNetwork.parameters() if p.requires_grad],
+                         'lr':args.learning_rate})
+        if args.TST_Learning_Mode:
+            optimizer_cls = AdamWTSTLearning
+            optimizer_kwargs = {
+                "betas": (.9, .999),
+                "eps": 1e-6,
+            }
+            optimizer_kwargs["lr"] = args.learning_rate
+            optimizer = optimizer_cls(param_groups, **optimizer_kwargs)
+            self.task_optims['ou5_rs'] = optimizer
+        else:
+            self.task_optims['ou5_rs'] = AdamW(param_groups, lr=args.learning_rate)
+        self.loss_fns['ou5_rs'] = nn.CrossEntropyLoss()
+
+        # RS ou10
+        param_groups = [{'params': [p for p in self.critic.task_model.base_network.parameters() if p.requires_grad],
+                         'lr':args.pretrained_model_learning_rate}]
+        param_groups.append(
+            {'params': [p for p in self.critic.task_model.SSAModule.parameters() if p.requires_grad],
+             'lr': args.learning_rate})
+        param_groups.append({'params': [p for p in self.critic.task_model.Ou10RSNetwork.parameters() if p.requires_grad],
+                         'lr':args.learning_rate})
+        if args.TST_Learning_Mode:
+            optimizer_cls = AdamWTSTLearning
+            optimizer_kwargs = {
+                "betas": (.9, .999),
+                "eps": 1e-6,
+            }
+            optimizer_kwargs["lr"] = args.learning_rate
+            optimizer = optimizer_cls(param_groups, **optimizer_kwargs)
+            self.task_optims['ou10_rs'] = optimizer
+        else:
+            self.task_optims['ou10_rs'] = AdamW(param_groups, lr=args.learning_rate)
+        self.loss_fns['ou10_rs'] = nn.CrossEntropyLoss()
+
+
+        # RS ou15
+        param_groups = [{'params': [p for p in self.critic.task_model.base_network.parameters() if p.requires_grad],
+                         'lr':args.pretrained_model_learning_rate}]
+        param_groups.append(
+            {'params': [p for p in self.critic.task_model.SSAModule.parameters() if p.requires_grad],
+             'lr': args.learning_rate})
+        param_groups.append({'params': [p for p in self.critic.task_model.Ou15RSNetwork.parameters() if p.requires_grad],
+                         'lr':args.learning_rate})
+        if args.TST_Learning_Mode:
+            optimizer_cls = AdamWTSTLearning
+            optimizer_kwargs = {
+                "betas": (.9, .999),
+                "eps": 1e-6,
+            }
+            optimizer_kwargs["lr"] = args.learning_rate
+            optimizer = optimizer_cls(param_groups, **optimizer_kwargs)
+            self.task_optims['ou15_rs'] = optimizer
+        else:
+            self.task_optims['ou15_rs'] = AdamW(param_groups, lr=args.learning_rate)
+        self.loss_fns['ou15_rs'] = nn.CrossEntropyLoss()
+
         self.saved_actions = []
         self.rewards = []
 
@@ -345,7 +516,7 @@ class PolicyNetwork(nn.Module):
         action_probs = self.actor(batch_rep)
         return action_probs, batch_rep, exp_reward
     
-    def compute_Pat1_and_loss_reward(self, tasktype, eval_dataloader, source_file):
+    def compute_Pat1_and_loss_reward(self, tasktype, eval_dataloader):
         eval_matrix = {
             'hypothesis': None,
             'reference': None,
@@ -355,12 +526,12 @@ class PolicyNetwork(nn.Module):
         total_result_dic = {}
         accum_eval_link_loss, accum_eval_label_loss = [], []
         for batch in tqdm(eval_dataloader):
-            texts, input_mask, segment_ids, labels, sep_index, pairs, graphs, speakers, turns, edu_nums, ids = batch
-            texts, input_mask, segment_ids, graphs, speakers, turns, edu_nums = \
-                texts.cuda(), input_mask.cuda(), segment_ids.cuda(), graphs.cuda(), speakers.cuda(), turns.cuda(), edu_nums.cuda()
+            texts, input_mask, segment_ids, speaker_ids, sep_index, pairs, graphs, speakers, turns, edu_nums, ids = batch
+            texts, input_mask, segment_ids, speaker_ids, graphs, speakers, turns, edu_nums = \
+                texts.cuda(), input_mask.cuda(), segment_ids.cuda(), speaker_ids.cuda(), graphs.cuda(), speakers.cuda(), turns.cuda(), edu_nums.cuda()
             mask = get_mask(edu_nums + 1, self.args.max_edu_dist).cuda()
             with torch.no_grad():
-                link_scores, label_scores = self.critic.task_output(tasktype, texts, input_mask, segment_ids,
+                link_scores, label_scores = self.critic.task_output(tasktype, texts, input_mask, segment_ids,speaker_ids,
                                                                     sep_index,edu_nums, speakers, turns)
 
             eval_link_loss, eval_label_loss = compute_loss(link_scores, label_scores, graphs, mask)
@@ -394,7 +565,7 @@ class PolicyNetwork(nn.Module):
                 total_result_dic[ids[i]] = predicted_result
                 record_eval_result(eval_matrix, predicted_result)
         evaluateAddressTo = EvaluateAddressTo()
-        Pat1, SessAcc = evaluateAddressTo.get_Pat1AndSessAcc(total_result_dic, source_file)
+        Pat1, SessAcc = evaluateAddressTo.get_Pat1AndSessAcc(total_result_dic, self.args.source_file,type='ar')
         a, b = zip(*accum_eval_link_loss)
         c, d = zip(*accum_eval_label_loss)
         eval_link_loss, eval_label_loss = sum(a) / sum(b), sum(c) / sum(d)
@@ -404,6 +575,63 @@ class PolicyNetwork(nn.Module):
         print('Pat1 is {}, SessAcc is {}'.format(Pat1, SessAcc))
         print('link loss is {}, rel loss is {}'.format(eval_link_loss, eval_label_loss))
         return Pat1, SessAcc
+
+    def compute_SI_Pat1_and_loss_reward(self, tasktype, eval_dataloader):
+        #只找最后一个utterance的确定的spk，golden是spk的数量，不是utterance的数量
+        eval_matrix = {
+            'hypothesis': None,
+            'reference': None,
+            'edu_num': None
+        }
+        from tqdm import tqdm
+        total_result_dic = {}
+        accum_eval_link_loss, accum_eval_label_loss = [], []
+        for batch in tqdm(eval_dataloader):
+            texts, input_mask, segment_ids, speaker_ids, sep_index, pairs, graphs, speakers, turns, edu_nums, ids = batch
+            texts, input_mask, segment_ids, speaker_ids, graphs, speakers, turns, edu_nums = \
+                texts.cuda(), input_mask.cuda(), segment_ids.cuda(),speaker_ids.cuda(), graphs.cuda(), speakers.cuda(), turns.cuda(), edu_nums.cuda()
+            mask = get_mask(edu_nums + 1, self.args.max_edu_dist).cuda()
+            with torch.no_grad():
+                link_scores, label_scores = self.critic.task_output(tasktype, texts, input_mask, segment_ids,speaker_ids,
+                                                                    sep_index,edu_nums, speakers, turns)
+
+            eval_link_loss, eval_label_loss = compute_loss(link_scores, label_scores, graphs, mask)
+            accum_eval_link_loss.append((eval_link_loss.sum(), eval_link_loss.size(-1)))
+            accum_eval_label_loss.append((eval_label_loss.sum(), eval_label_loss.size(-1)))
+
+            batch_size = link_scores.size(0)
+            max_len = edu_nums.max()
+            link_scores[~mask] = -1e9
+            predicted_links = torch.argmax(link_scores, dim=-1)
+            predicted_labels = torch.argmax(label_scores.reshape(-1, max_len + 1, self.args.relation_type_num)[
+                                                torch.arange(batch_size * (max_len + 1)), predicted_links.reshape(
+                                                    -1)].reshape(batch_size, max_len + 1, self.args.relation_type_num),
+                                            dim=-1)
+            predicted_links = predicted_links[:, 1:] - 1
+            predicted_labels = predicted_labels[:, 1:]
+
+            for i in range(batch_size):
+                hp_pairs = {}
+                step = edu_nums[i].item()-1
+                # while step < edu_nums[i]:
+                link = predicted_links[i][step].item()
+                label = predicted_labels[i][step].item()
+                hp_pairs[(link, step)] = label
+
+                predicted_result = {'hypothesis': hp_pairs,
+                                    'reference': pairs[i],
+                                    'edu_num': step}
+                # predicted_result['id'] = ids[i]
+                total_result_dic[ids[i]] = predicted_result
+
+        evaluateAddressTo = EvaluateAddressTo()
+        Pat1, Pat1 = evaluateAddressTo.get_Pat1AndSessAcc(total_result_dic, self.args.source_file, type='si')
+        a, b = zip(*accum_eval_link_loss)
+        c, d = zip(*accum_eval_label_loss)
+        eval_link_loss, eval_label_loss = sum(a) / sum(b), sum(c) / sum(d)
+        print('Pat1 is {}'.format(Pat1))
+        return Pat1, Pat1
+
 
 
     def compute_RS_f1_and_loss_reward(self, tasktype, eval_dataloader, des_file=None):
@@ -603,7 +831,8 @@ class PolicyNetwork(nn.Module):
                 link_loss = self.loss_fns[task_type](link_scores, graphs)
                 label_loss = torch.tensor([0]) #default
                 loss = link_loss
-            elif task_type=='hu_ar' or task_type=='ou5_ar' or task_type=='ou10_ar' or task_type=='ou15_ar':
+            elif task_type=='hu_ar' or task_type=='ou5_ar' or task_type=='ou10_ar' or task_type=='ou15_ar' or \
+                task_type=='hu_si' or task_type=='ou5_si' or task_type=='ou10_si' or task_type=='ou15_si':
                 link_loss, label_loss = compute_loss(link_scores.clone(), label_scores.clone(), graphs, mask )
                 link_loss = link_loss.mean()
                 label_loss = label_loss.mean()

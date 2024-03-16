@@ -201,12 +201,13 @@ class EvaluateAddressTo:
         print('P_total is {}, P_correct is {}'.format(P_total, P_correct))
         print('P@1 is {}'.format(round(P_At_1,6)))
 
-    def calP1_new(self, datadic, speaker_dic):
+    def calP1_AR(self, datadic, speaker_dic):
         """
         计算p@1，
         :return:
         """
         P_total = P_correct = 0
+        
         for id, value in datadic.items():
             temp_speaker_dic = speaker_dic[id]
             hypo = value['hypothesis']
@@ -223,8 +224,7 @@ class EvaluateAddressTo:
             ref_address_to = []  # [utt,address_to_speaker],[utt,address_to_speaker]
             for link in refLinks:
                 ref_address_to.append((link[1], temp_speaker_dic[link[0]]))
-
-            P_total += len(set(ref_address_to))
+            P_total += len(set(ref_address_to)) # 总计有多少条边，即需要找几个addressee to
             for a in set(ref_address_to):
                 if a in set(hypo_address_to):
                     P_correct += 1
@@ -232,9 +232,11 @@ class EvaluateAddressTo:
         P_At_1 = P_correct / P_total
         print(P_correct)
         print(P_total)
-        # print('P_total is {}, P_correct is {}'.format(P_total, P_correct))
-        # print('P@1 is {}'.format(round(P_At_1, 6)))
+       
         return P_At_1
+    
+
+
     def IsAallInB(self,set1,set2):
         """
         判断set1中的元素是够全部在set2中
@@ -279,31 +281,49 @@ class EvaluateAddressTo:
                 ref_address_to.append((link[1], temp_speaker_dic[link[0]]))
             ref_address_to_set = set(ref_address_to)
             hypo_address_to_set = set(hypo_address_to)
-            if self.IsAallInB(ref_address_to_set,hypo_address_to_set):
+            if self.IsAallInB(ref_address_to_set, hypo_address_to_set):
                 Acc_correct += 1
         SessionAcc = Acc_correct / Acc_total
         print(Acc_correct)
         print(Acc_total)
         return SessionAcc
 
-    def test(self, inputfile, sourcetestfile):
+   
+    def get_Pat1AndSessAcc(self,datadic, sourcetestfile, type = 'ar'):
+        speakerdic = self.readSourceFile(sourcetestfile)
+        if type== 'ar':
+            Pat1 = self.calP1_AR(datadic, speakerdic)
+            SessionAcc = self.calSesseionAcc(datadic, speakerdic)
+            return Pat1, SessionAcc
+        elif type=='si':
+            Pat1 = self.get_SI_Pat1(datadic)
+            return Pat1, Pat1
+        else:
+            raise KeyError
+    
+    def get_SI_Pat1(self, datadic):
         """
-        This is a test funciton.
+        计算SI P@1，即找last utterance的说话人，找到就是1，没找到就是0.
+        计算p@1，addressee recognition 和 Speaker identicaition都是确定speaker，因此 total应该是speaker的数量，不是所有utterance的数量
         :return:
         """
-        speakerdic = self.readSourceFile(sourcetestfile)
-        datadic = self.readFile(inputfile)
-        self.calP1_new(datadic, speakerdic)
-        self.calSesseionAcc(datadic, speakerdic)
+        P_total = P_correct = 0
+        for id, value in datadic.items():
+            print('datadic_')
+            hypo = list(value['hypothesis'].keys())
+            assert len(hypo)==1
+            ref = list(value['reference'].keys())
+            print(hypo)
+            print(ref)
+            P_total += 1
+            if hypo[0] in ref:
+                P_correct +=1
 
-    def get_Pat1AndSessAcc(self,datadic, sourcetestfile):
-        print('ssss')
-        print(sourcetestfile)
-        speakerdic = self.readSourceFile(sourcetestfile)
-        Pat1 = self.calP1_new(datadic, speakerdic)
-        SessionAcc = self.calSesseionAcc(datadic, speakerdic)
-        return Pat1, SessionAcc
-
+        P_At_1 = P_correct / P_total
+        print(P_correct)
+        print(P_total)
+        return P_At_1
+    
 def is_valid_query(v):
     num_pos = 0
     num_neg = 0

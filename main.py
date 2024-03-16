@@ -27,14 +27,30 @@ if __name__ == '__main__':
     parser.add_argument('--train_mol_file', type=str)
     parser.add_argument('--eval_mol_file', type=str)
     parser.add_argument('--test_mol_file', type=str)
-    parser.add_argument('--train_hu_file', type=str)
-    parser.add_argument('--train_ou5_file', type=str)
-    parser.add_argument('--train_ou10_file', type=str)
-    parser.add_argument('--train_ou15_file', type=str)
-    parser.add_argument('--test_hu_file', type=str)
-    parser.add_argument('--test_ou_len5_file', type=str)
-    parser.add_argument('--test_ou_len10_file', type=str)
-    parser.add_argument('--test_ou_len15_file', type=str)
+    parser.add_argument('--train_hu_ar_file', type=str)
+    parser.add_argument('--train_ou5_ar_file', type=str)
+    parser.add_argument('--train_ou10_ar_file', type=str)
+    parser.add_argument('--train_ou15_ar_file', type=str)
+    parser.add_argument('--eval_hu_ar_file', type=str)
+    parser.add_argument('--eval_ou5_ar_file', type=str)
+    parser.add_argument('--eval_ou10_ar_file', type=str)
+    parser.add_argument('--eval_ou15_ar_file', type=str)
+    parser.add_argument('--test_hu_ar_file', type=str)
+    parser.add_argument('--test_ou5_ar_file', type=str)
+    parser.add_argument('--test_ou10_ar_file', type=str)
+    parser.add_argument('--test_ou15_ar_file', type=str)
+    parser.add_argument('--train_hu_si_file', type=str)
+    parser.add_argument('--train_ou5_si_file', type=str)
+    parser.add_argument('--train_ou10_si_file', type=str)
+    parser.add_argument('--train_ou15_si_file', type=str)
+    parser.add_argument('--eval_hu_si_file', type=str)
+    parser.add_argument('--eval_ou5_si_file', type=str)
+    parser.add_argument('--eval_ou10_si_file', type=str)
+    parser.add_argument('--eval_ou15_si_file', type=str)
+    parser.add_argument('--test_hu_si_file', type=str)
+    parser.add_argument('--test_ou5_si_file', type=str)
+    parser.add_argument('--test_ou10_si_file', type=str)
+    parser.add_argument('--test_ou15_si_file', type=str)
     parser.add_argument('--train_hu_rs_file', type=str)
     parser.add_argument('--train_ou5_rs_file', type=str)
     parser.add_argument('--train_ou10_rs_file', type=str)
@@ -113,6 +129,7 @@ if __name__ == '__main__':
     parser.add_argument('--only_BERT', action="store_true")
     parser.add_argument('--cat_cls_structurePath', action="store_true")
     parser.add_argument('--with_GRU', action="store_true")
+    parser.add_argument('--source_file', type=str, default='')
     
     args = parser.parse_args()
     seed_everything(args.seed)
@@ -124,11 +141,27 @@ if __name__ == '__main__':
 
     tokenizer = AutoTokenizer.from_pretrained(args.model_name_or_path)
 
-    train_hu_file = os.path.join(args.dataset_dir, 'train_hu.pt')
-    train_ou5_file = os.path.join(args.dataset_dir, 'train_ou5.pt')
-    train_ou10_file = os.path.join(args.dataset_dir, 'train_ou10.pt')
-    train_ou15_file = os.path.join(args.dataset_dir, 'train_ou15.pt')
+    train_hu_ar_file = os.path.join(args.dataset_dir, 'train_hu_ar.pt')
+    train_ou5_ar_file = os.path.join(args.dataset_dir, 'train_ou5_ar.pt')
+    train_ou10_ar_file = os.path.join(args.dataset_dir, 'train_ou10_ar.pt')
+    train_ou15_ar_file = os.path.join(args.dataset_dir, 'train_ou15_ar.pt')
     
+    eval_hu_ar_file = os.path.join(args.dataset_dir, 'eval_hu_ar.pt')
+    eval_ou5_ar_file = os.path.join(args.dataset_dir, 'eval_ou5_ar.pt')
+    eval_ou10_ar_file = os.path.join(args.dataset_dir, 'eval_ou10_ar.pt')
+    eval_ou15_ar_file = os.path.join(args.dataset_dir, 'eval_ou15_ar.pt')
+    
+
+    train_hu_si_file = os.path.join(args.dataset_dir, 'train_hu_si.pt')
+    train_ou5_si_file = os.path.join(args.dataset_dir, 'train_ou5_si.pt')
+    train_ou10_si_file = os.path.join(args.dataset_dir, 'train_ou10_si.pt')
+    train_ou15_si_file = os.path.join(args.dataset_dir, 'train_ou15_si.pt')
+    
+    eval_hu_si_file = os.path.join(args.dataset_dir, 'eval_hu_si.pt')
+    eval_ou5_si_file = os.path.join(args.dataset_dir, 'eval_ou5_si.pt')
+    eval_ou10_si_file = os.path.join(args.dataset_dir, 'eval_ou10_si.pt')
+    eval_ou15_si_file = os.path.join(args.dataset_dir, 'eval_ou15_si.pt')
+
     train_hu_rs_file = os.path.join(args.dataset_dir, 'train_hu_rs.pt')
     train_ou5_rs_file = os.path.join(args.dataset_dir, 'train_ou5_rs.pt')
     train_ou10_rs_file = os.path.join(args.dataset_dir, 'train_ou10_rs.pt')
@@ -146,12 +179,16 @@ if __name__ == '__main__':
     if os.path.exists(train_mol_file) and not args.remake_dataset:
         print('loading dataset..')
         if args.do_train:
-            # train_dataset_hu = torch.load(train_hu_file)
+            train_dataset_hu_ar = torch.load(train_hu_ar_file)
+            eval_dataset_hu_ar = torch.load(eval_hu_ar_file)
+
+            train_dataset_hu_si = torch.load(train_hu_si_file)
+            eval_dataset_hu_si = torch.load(eval_hu_si_file)
             # train_dataset_ou5 = torch.load(train_ou5_file)
             # train_dataset_ou10 = torch.load(train_ou10_file)
             # train_dataset_ou15 = torch.load(train_ou15_file)
-            train_hu_rs_file = torch.load(train_hu_rs_file)
-            eval_hu_rs_file = torch.load(eval_hu_rs_file)
+            # train_hu_rs_dataset = torch.load(train_hu_rs_file)
+            # eval_hu_rs_dataset = torch.load(eval_hu_rs_file)
             # train_ou5_rs_file = torch.load(train_ou5_rs_file)
             # train_ou10_rs_file = torch.load(train_ou10_rs_file)
             # train_ou15_rs_file = torch.load(train_ou15_rs_file)
@@ -166,12 +203,17 @@ if __name__ == '__main__':
                                                    total_seq_len=args.max_mol_text_len)
             test_dataset_mol.get_relations(relations, type2ids, id2types)
             test_dataset_mol.get_discourse_graph()
-            # test_dataset_hu = DialogueDataset(args=args, filename=args.test_hu_file, tokenizer=tokenizer,
-            #                                         mode='test', text_max_sep_len=args.utt_max_len,
-            #                                         total_seq_len=args.max_hu_text_len)
-            # test_dataset_hu.get_relations(relations, type2ids, id2types)
-            # test_dataset_hu.get_discourse_graph()
+            test_dataset_hu_ar = DialogueDataset(args=args, filename=args.test_hu_ar_file, tokenizer=tokenizer,
+                                                    mode='test', text_max_sep_len=args.utt_max_len,
+                                                    total_seq_len=args.max_hu_text_len)
+            test_dataset_hu_ar.get_relations(relations, type2ids, id2types)
+            test_dataset_hu_ar.get_discourse_graph()
 
+            test_dataset_hu_si = DialogueDataset(args=args, filename=args.test_hu_si_file, tokenizer=tokenizer,
+                                                    mode='test', text_max_sep_len=args.utt_max_len,
+                                                    total_seq_len=args.max_hu_text_len)
+            test_dataset_hu_si.get_relations(relations, type2ids, id2types)
+            test_dataset_hu_si.get_discourse_graph()
             # test_dataset_ou_len5 = DialogueDataset(args=args, filename=args.test_ou_len5_file, tokenizer=tokenizer,
             #                                   mode='test', text_max_sep_len=args.utt_max_len,
             #                                   total_seq_len=args.max_ou5_text_len)
@@ -200,16 +242,26 @@ if __name__ == '__main__':
             #                                 text_max_sep_len=args.utt_max_len,
             #                                 filetype='test')
             
-            test_dataset_hu_rs = RSdataset( 
-                                            filename=args.test_hu_rs_file, 
-                                            tokenizer=tokenizer,
-                                            total_seq_len=args.max_hu_text_len,
-                                            text_max_sep_len=args.utt_max_len,
-                                            filetype='test')
+            # test_dataset_hu_rs = RSdataset( 
+            #                                 filename=args.test_hu_rs_file, 
+            #                                 tokenizer=tokenizer,
+            #                                 total_seq_len=args.max_hu_text_len,
+            #                                 text_max_sep_len=args.utt_max_len,
+            #                                 filetype='test')
 
     else:
-        # train_dataset_hu = DialogueDataset(args=args, filename= args.train_hu_file, tokenizer=tokenizer, mode='train',text_max_sep_len=args.utt_max_len,
-        #                                    total_seq_len = args.max_hu_text_len)
+        train_dataset_hu_ar = DialogueDataset(args=args, filename= args.train_hu_ar_file, tokenizer=tokenizer, mode='train',text_max_sep_len=args.utt_max_len,
+                                           total_seq_len = args.max_hu_text_len)
+        
+        eval_dataset_hu_ar = DialogueDataset(args=args, filename= args.eval_hu_ar_file, tokenizer=tokenizer, mode='eval',text_max_sep_len=args.utt_max_len,
+                                           total_seq_len = args.max_hu_text_len)
+        
+
+        train_dataset_hu_si = DialogueDataset(args=args, filename= args.train_hu_si_file, tokenizer=tokenizer, mode='train',text_max_sep_len=args.utt_max_len,
+                                           total_seq_len = args.max_hu_text_len)
+        
+        eval_dataset_hu_si = DialogueDataset(args=args, filename= args.eval_hu_si_file, tokenizer=tokenizer, mode='eval',text_max_sep_len=args.utt_max_len,
+                                           total_seq_len = args.max_hu_text_len)
 
         # train_dataset_ou5 = DialogueDataset(args=args, filename=args.train_ou5_file, tokenizer=tokenizer,
         #                                          mode='train', text_max_sep_len=args.utt_max_len,
@@ -247,19 +299,19 @@ if __name__ == '__main__':
         #                                     filetype='train')
 
    
-        train_dataset_hu_rs = RSdataset(
-                                            filename=args.train_hu_rs_file, 
-                                            tokenizer=tokenizer,
-                                            total_seq_len=args.max_hu_text_len,
-                                            text_max_sep_len=args.utt_max_len,
-                                            filetype='train')
+        # train_dataset_hu_rs = RSdataset(
+        #                                     filename=args.train_hu_rs_file, 
+        #                                     tokenizer=tokenizer,
+        #                                     total_seq_len=args.max_hu_text_len,
+        #                                     text_max_sep_len=args.utt_max_len,
+        #                                     filetype='train')
         
-        eval_dataset_hu_rs = RSdataset(
-                                            filename=args.eval_hu_rs_file, 
-                                            tokenizer=tokenizer,
-                                            total_seq_len=args.max_hu_text_len,
-                                            text_max_sep_len=args.utt_max_len,
-                                            filetype='eval')
+        # eval_dataset_hu_rs = RSdataset(
+        #                                     filename=args.eval_hu_rs_file, 
+        #                                     tokenizer=tokenizer,
+        #                                     total_seq_len=args.max_hu_text_len,
+        #                                     text_max_sep_len=args.utt_max_len,
+        #                                     filetype='eval')
 
         train_dataset_mol = DialogueDataset(args=args, filename=args.train_mol_file, tokenizer=tokenizer, mode='train',
                                         text_max_sep_len=args.utt_max_len,
@@ -277,8 +329,18 @@ if __name__ == '__main__':
         eval_dataset_mol.get_relations(relations, type2ids, id2types)
         eval_dataset_mol.get_discourse_graph()
 
-        # train_dataset_hu.get_relations(relations, type2ids, id2types)
-        # train_dataset_hu.get_discourse_graph()
+        train_dataset_hu_ar.get_relations(relations, type2ids, id2types)
+        train_dataset_hu_ar.get_discourse_graph()
+
+        eval_dataset_hu_ar.get_relations(relations, type2ids, id2types)
+        eval_dataset_hu_ar.get_discourse_graph()
+
+
+        train_dataset_hu_si.get_relations(relations, type2ids, id2types)
+        train_dataset_hu_si.get_discourse_graph()
+
+        eval_dataset_hu_si.get_relations(relations, type2ids, id2types)
+        eval_dataset_hu_si.get_discourse_graph()
 
         # train_dataset_ou5.get_relations(relations, type2ids, id2types)
         # train_dataset_ou5.get_discourse_graph()
@@ -292,12 +354,15 @@ if __name__ == '__main__':
         print('saving dataset..')
         torch.save(train_dataset_mol, train_mol_file)
         torch.save(eval_dataset_mol, eval_mol_file)
-        # torch.save(train_dataset_hu, train_hu_file)
+        torch.save(train_dataset_hu_ar, train_hu_ar_file)
+        torch.save(eval_dataset_hu_ar, eval_hu_ar_file)
+        torch.save(train_dataset_hu_si, train_hu_si_file)
+        torch.save(eval_dataset_hu_si, eval_hu_si_file)
         # torch.save(train_dataset_ou5, train_ou5_file)
         # torch.save(train_dataset_ou10, train_ou10_file)
         # torch.save(train_dataset_ou15, train_ou15_file)
-        torch.save(train_dataset_hu_rs, train_hu_rs_file)
-        torch.save(eval_dataset_hu_rs, eval_hu_rs_file)
+        # torch.save(train_dataset_hu_rs, train_hu_rs_file)
+        # torch.save(eval_dataset_hu_rs, eval_hu_rs_file)
         # torch.save(train_dataset_ou5_rs, train_ou5_rs_file)
         # torch.save(train_dataset_ou10_rs, train_ou10_rs_file)
         # torch.save(train_dataset_ou15_rs, train_ou15_rs_file)
@@ -478,8 +543,10 @@ if __name__ == '__main__':
         return pool(examples)
 
 
-    def MultiTaskLearning(mtl_model, train_hu_dataloader, train_ou5_dataloader,
-                                        train_ou10_dataloader, train_ou15_dataloader, 
+    def MultiTaskLearning(mtl_model, train_hu_ar_dataloader, train_ou5_ar_dataloader,
+                                        train_ou10_ar_dataloader, train_ou15_ar_dataloader, 
+                                        train_hu_si_dataloader, train_ou5_si_dataloader,
+                                        train_ou10_si_dataloader, train_ou15_si_dataloader, 
                                         train_hu_rs_dataloader, train_ou5_rs_dataloader,
                                         train_ou10_rs_dataloader, train_ou15_rs_dataloader,
                                         train_mol_dataloader):
@@ -533,32 +600,32 @@ if __name__ == '__main__':
         #         total_ou15_loss = 0
         #     if args.debug:
         #         break 
-        #train hu
-        # for hu_data_batch in tqdm(train_hu_dataloader):
-        #     hu_link_rs_loss, _ = \
-        #         mtl_model.train_minibatch('hu_ar', hu_data_batch)
-        #     total_hu_loss += hu_link_rs_loss
-        #     step += 1
-        #     if step % args.report_step == 0:
-        #         print('\t{} step hu loss: {:.4f} '.format(step, total_hu_loss / args.report_step))
-        #         total_hu_loss = 0
-        #     if args.debug:
-        #         break 
-        # train mol
-        for mol_data_batch in tqdm(train_mol_dataloader):
-            temp_link_mol_loss, temp_rel_mol_loss = \
-                mtl_model.train_minibatch('parsing', mol_data_batch)
-            total_molweni_link_loss += temp_link_mol_loss
-            total_molweni_rel_loss += temp_rel_mol_loss
+        # train hu
+        for hu_data_batch in tqdm(train_hu_si_dataloader):
+            hu_link_rs_loss, _ = \
+                mtl_model.train_minibatch('hu_si', hu_data_batch)
+            total_hu_loss += hu_link_rs_loss
             step += 1
             if step % args.report_step == 0:
-                print(
-                    '\t{} mol link loss {:.4f}, rel loss {:.4f} '.format(step,
-                                  total_molweni_link_loss / args.report_step,
-                                  total_molweni_rel_loss / args.report_step))
-                total_molweni_link_loss = total_molweni_rel_loss = 0
+                print('\t{} step hu loss: {:.4f} '.format(step, total_hu_loss / args.report_step))
+                total_hu_loss = 0
             if args.debug:
                 break 
+        # train mol
+        # for mol_data_batch in tqdm(train_mol_dataloader):
+        #     temp_link_mol_loss, temp_rel_mol_loss = \
+        #         mtl_model.train_minibatch('parsing', mol_data_batch)
+        #     total_molweni_link_loss += temp_link_mol_loss
+        #     total_molweni_rel_loss += temp_rel_mol_loss
+        #     step += 1
+        #     if step % args.report_step == 0:
+        #         print(
+        #             '\t{} mol link loss {:.4f}, rel loss {:.4f} '.format(step,
+        #                           total_molweni_link_loss / args.report_step,
+        #                           total_molweni_rel_loss / args.report_step))
+        #         total_molweni_link_loss = total_molweni_rel_loss = 0
+        #     if args.debug:
+        #         break 
             
     def generate_TST_mask(args, model, task_type, train_dataloader):
         gradient_mask = dict()
@@ -668,17 +735,25 @@ if __name__ == '__main__':
                                          shuffle=False,
                                          collate_fn=eval_collate_fn_mol)
 
-        # train_dataloader_hu = DataLoader(dataset=train_dataset_hu, batch_size=args.hu_pool_size, shuffle=True,
-        #                                     collate_fn=train_collate_fn_hu)
-
-        train_dataloader_hu_rs =   DataLoader(dataset=train_hu_rs_file, batch_size=args.hu_pool_size,
-                                               shuffle=True,
-                                               collate_fn=train_collate_fn_hu)
+        train_dataloader_hu_ar = DataLoader(dataset=train_dataset_hu_ar, batch_size=args.hu_pool_size, shuffle=True,
+                                            collate_fn=train_collate_fn_hu)
         
-        eval_dataloader_hu_rs =   DataLoader(dataset=eval_hu_rs_file, batch_size=args.hu_pool_size,
-                                               shuffle=False,
-                                               collate_fn=eval_collate_fn_mol)
-        train_dataloader_hu = ''  
+        eval_dataloader_hu_ar = DataLoader(dataset=eval_dataset_hu_ar, batch_size=args.hu_pool_size, shuffle=False,
+                                            collate_fn=eval_collate_fn_mol)
+
+        train_dataloader_hu_si = DataLoader(dataset=train_dataset_hu_si, batch_size=args.hu_pool_size, shuffle=True,
+                                            collate_fn=train_collate_fn_hu)
+        
+        eval_dataloader_hu_si = DataLoader(dataset=eval_dataset_hu_si, batch_size=args.hu_pool_size, shuffle=False,
+                                            collate_fn=eval_collate_fn_mol)
+        # train_dataloader_hu_rs =   DataLoader(dataset=train_hu_rs_dataset, batch_size=args.hu_pool_size,
+        #                                        shuffle=True,
+        #                                        collate_fn=train_collate_fn_hu)
+        
+        # eval_dataloader_hu_rs =   DataLoader(dataset=eval_hu_rs_dataset, batch_size=args.hu_pool_size,
+        #                                        shuffle=False,
+        #                                        collate_fn=eval_collate_fn_mol)
+        # train_dataloader_hu = ''  
 
         # train_dataloader_ou5 = DataLoader(dataset=train_dataset_ou5, batch_size=args.ou5_pool_size,
         #                                        shuffle=True,
@@ -717,21 +792,25 @@ if __name__ == '__main__':
         # model.set_gradient_mask(ou15_mask, 'ou15_ar')
         
 
-        max_reward = 10000
+        max_reward = 0
         max_epoch = -1
         for epoch in range(args.TST_epoches):
             # print('{} epoch TST finetuning..'.format(epoch + 1))
             model.train() 
 
-            MultiTaskLearning(model, train_dataloader_hu,
+            MultiTaskLearning(model, '',
                             '',
                             '',
                             '',
-                            train_dataloader_hu_rs, 
+                            train_dataloader_hu_ar,
+                            '', 
                             '',
                             '', 
                             '',
-                            train_dataloader_mol)
+                             '', 
+                            '',
+                            '', 
+                            '',)
             # hu_rs_eval_loss, hu_epoch_f1 = model.compute_RS_f1_and_loss_reward(tasktype='hu_rs',
             #                                                           eval_dataloader=eval_dataloader_hu_rs)
 
@@ -740,17 +819,25 @@ if __name__ == '__main__':
             #     torch.save(model.state_dict(), args.TST_model_path + '.pt')
             #     max_reward = hu_rs_eval_loss
 
-            mol_linkandrel_loss, _ = model.compute_f1_and_loss_reward(tasktype='parsing',
-                                                                      eval_dataloader=eval_dataloader_mol)
+            # mol_linkandrel_loss, _ = model.compute_f1_and_loss_reward(tasktype='parsing',
+            #                                                           eval_dataloader=eval_dataloader_mol)
            
-            print('eval mol link loss {}'.format(mol_linkandrel_loss))
-            total_eval_loss = mol_linkandrel_loss
-            print('total eval loss {}'.format(total_eval_loss))
-            if total_eval_loss < max_reward:
-                torch.save(model.state_dict(), args.TST_model_path + '.pt')
-                max_reward = total_eval_loss
-                max_epoch = epoch
+            # print('eval mol link loss {}'.format(mol_linkandrel_loss))
+            # total_eval_loss = mol_linkandrel_loss
+            # print('total eval loss {}'.format(total_eval_loss))
+            # if total_eval_loss < max_reward:
+            #     torch.save(model.state_dict(), args.TST_model_path + '.pt')
+            #     max_reward = total_eval_loss
+            #     max_epoch = epoch
 
+            Pat1, SessAcc = model.compute_Pat1_and_loss_reward(tasktype='hu_si',
+                                                                      eval_dataloader=eval_dataloader_hu_si)
+           
+           
+            if Pat1 > max_reward:
+                torch.save(model.state_dict(), args.TST_model_path + '.pt')
+                max_reward = Pat1
+                max_epoch = epoch
 
     else:
         test_dataloader_mol = DataLoader(dataset=test_dataset_mol, batch_size=args.eval_mol_pool_size,
@@ -760,21 +847,28 @@ if __name__ == '__main__':
         #                                  shuffle=False,
         #                                  collate_fn=eval_collate_fn_mol)
 
-        test_dataloader_hu_rs =   DataLoader(dataset=test_dataset_hu_rs, batch_size=args.hu_pool_size,
-                                               shuffle=False,
-                                               collate_fn=eval_collate_fn_mol)
+        # test_dataloader_hu_rs =   DataLoader(dataset=test_dataset_hu_rs, batch_size=args.hu_pool_size,
+        #                                        shuffle=False,
+        #                                        collate_fn=eval_collate_fn_mol)
+
+
+                
+        test_dataloader_hu_ar = DataLoader(dataset=test_dataset_hu_ar, batch_size=args.hu_pool_size, shuffle=False,
+                                            collate_fn=eval_collate_fn_mol)
+        
+        test_dataloader_hu_si = DataLoader(dataset=test_dataset_hu_si, batch_size=args.hu_pool_size, shuffle=False,
+                                            collate_fn=eval_collate_fn_mol)
         pretrained_model = BertWithSpeakerID(args) # bert_model_name, speaker_id_dim, num_speakers 
         model = PolicyNetwork(args=args, pretrained_model=pretrained_model)
         model = model.to(args.device)
         state_dict = torch.load(args.TST_model_path+'.pt')
         model.load_state_dict(state_dict,strict=False)
         model.eval()
-        total_loss, total_f1 = model.compute_f1_and_loss_reward(tasktype='parsing',
-                                                          eval_dataloader=test_dataloader_mol)
+        # total_loss, total_f1 = model.compute_f1_and_loss_reward(tasktype='hu_si',
+        #                                                   eval_dataloader=test_dataloader_hu_si)
         # print('ou_address to')
-        # Re, total_f1 = model.compute_Pat1_and_loss_reward(tasktype='ou5_ar',
-        #                                                   eval_dataloader=test_dataloader_ou_len5,
-        #                                                   source_file=args.test_ou_len5_file)
+        Pat1, _ = model.compute_SI_Pat1_and_loss_reward(tasktype='hu_si',
+                                                          eval_dataloader=test_dataloader_hu_si)
 
         # hu_rs_eval_loss, hu_epoch_f1 = model.compute_RS_f1_and_loss_reward(tasktype='hu_rs',
         #                                                     eval_dataloader=test_dataloader_hu_rs)
