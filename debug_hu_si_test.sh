@@ -6,6 +6,7 @@ test_ou5_ar_file="${data_dir}/Ou_Dataset/Ou5_Link_Dir/test.json"
 test_ou10_ar_file="${data_dir}/Ou_Dataset/Ou10_Link_Dir/test.json"
 test_ou15_ar_file="${data_dir}/Ou_Dataset/Ou15_Link_Dir/test.json"
 test_hu_si_file="${data_dir}/Hu_Dataset/Hu_SI_Dir/test_si_parsingType.json"
+eval_hu_si_file="${data_dir}/Hu_Dataset/Hu_SI_Dir/valid_si_parsingType.json"
 test_ou5_si_file="${data_dir}/Ou_Dataset/Ou5_SI_Dir/test_si_parsingType.json"
 test_ou10_si_file="${data_dir}/Ou_Dataset/Ou10_SI_Dir/test_si_parsingType.json"
 test_ou15_si_file="${data_dir}/Ou_Dataset/Ou15_SI_Dir/test_si_parsingType.json"
@@ -28,6 +29,7 @@ CUDA_VISIBLE_DEVICES=${GPU}   python   main.py \
                                     --test_ou_rs_len10_file=$test_ou_rs_len10_file \
                                     --test_ou_rs_len15_file=$test_ou_rs_len15_file \
                                     --test_hu_si_file=$test_hu_si_file \
+                                    --eval_hu_si_file=$eval_hu_si_file \
                                     --test_ou5_si_file=$test_ou5_si_file \
                                     --test_ou10_si_file=$test_ou10_si_file \
                                     --test_ou15_si_file=$test_ou15_si_file \
@@ -39,7 +41,7 @@ CUDA_VISIBLE_DEVICES=${GPU}   python   main.py \
                                     --hu_batch_size 10 \
                                     --dataset_dir=$dataset_dir  \
                                     --source_file=$test_hu_si_file \
-                                    --ST_model_path "${model_dir}/hu_si_bert_ssa_withoutGRU" \
-                                    --TST_model_path "${model_dir}/hu_si_bert_ssa_withoutGRU" \
+                                    --ST_model_path "${model_dir}/hu_si_BERT_SSA" \
+                                    --TST_model_path "${model_dir}/hu_si_BERT_SSA" \
                                     --num_layers 1 \
                                     --max_edu_dist 16 

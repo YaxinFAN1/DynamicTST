@@ -48,6 +48,74 @@ class ARTask(nn.Module):
         return self.link_classifier(predicted_path).reshape(batch_size, node_num, node_num), \
                self.label_classifier(predicted_path)
 
+
+class SITask(nn.Module):
+    def __init__(self, params):
+        super(SITask, self).__init__()
+        self.params = params
+        self.root = nn.Parameter(torch.zeros(params.hidden_size), requires_grad=False)
+        self.link_classifier = Classifier(params.hidden_size * 2, params.hidden_size,
+                                          1)
+        self.label_classifier = Classifier(params.hidden_size * 2,
+                                           params.hidden_size,
+                                           params.relation_type_num)
+        self.dropout = nn.Dropout(params.dropout)
+    def __fetch_sep_rep2(self, ten_output, seq_index):
+        batch, seq_len, hidden_size = ten_output.shape
+        shift_sep_index_list = self.get_shift_sep_index_list(seq_index, seq_len)
+        ten_output = torch.reshape(ten_output, (batch * seq_len, hidden_size))
+        sep_embedding = ten_output[shift_sep_index_list, :]
+        sep_embedding = torch.reshape(sep_embedding, (batch, len(seq_index[0]), hidden_size))
+        return sep_embedding
+
+    def get_shift_sep_index_list(self, pad_sep_index_list, seq_len):
+        new_pad_sep_index_list = []
+        for index in range(len(pad_sep_index_list)):
+            new_pad_sep_index_list.extend([item + index * seq_len for item in pad_sep_index_list[index]])
+        return new_pad_sep_index_list
+
+    def padding_sep_index_list(self, sep_index_list):
+
+        max_edu = max([len(a) for a in sep_index_list])
+        total_new_sep_index_list = []
+        for index_list in sep_index_list:
+            new_sep_index_list = []
+            gap = max_edu - len(index_list)
+            new_sep_index_list.extend(index_list)
+            for i in range(gap):
+                new_sep_index_list.append(index_list[-1])
+            total_new_sep_index_list.append(new_sep_index_list)
+        return max_edu, total_new_sep_index_list
+      
+    def forward(self, cls_embedding, predicted_path, sep_index_list):
+        batch_size = cls_embedding[0].shape[0]
+        edu_num, pad_sep_index_list = self.padding_sep_index_list(sep_index_list)
+        node_num = edu_num + 1
+        sentences = self.__fetch_sep_rep2(cls_embedding[0], pad_sep_index_list)
+        nodes = torch.cat((self.root.expand(batch_size, 1, sentences.size(-1)),
+                           sentences.reshape(batch_size, edu_num, -1)), dim=1)
+        nodes = nodes.unsqueeze(1).expand(batch_size, node_num, node_num,  self.params.hidden_size)
+        nodes = torch.cat((nodes, nodes.transpose(1, 2)),dim=-1)
+        # # 池化predicted_path 
+        # predicted_path = torch.mean(predicted_path, dim=2)
+        # if self.params.only_SABERT or self.params.only_BERT:# 仅仅使用cls_embedding 进行分类
+        #     output  = cls_embedding[0]
+        # else: # 仅仅使用structure path的平均池化，或者拼接cls_embedding 和structure path
+        #     if self.params.with_spk_embedding:
+        #         if self.params.cat_cls_structurePath:
+        #             output = torch.cat((nodes, predicted_path),dim=-1)
+        #         else:
+        #             output = predicted_path
+        #     else:
+        #         output = predicted_path
+        # 拼接cls_embedding,structure path
+        return self.link_classifier(nodes).reshape(batch_size, node_num, node_num),  \
+               self.label_classifier(nodes)
+    # def forward(self, cls_embedding, predicted_path, batch_size, node_num):
+    #     return self.link_classifier(predicted_path).reshape(batch_size, node_num, node_num), \
+    #            self.label_classifier(predicted_path)
+
+
 class RSTask(nn.Module):
     def __init__(self, params):
         super(RSTask, self).__init__()
@@ -63,6 +131,7 @@ class RSTask(nn.Module):
             else:
                 self.classifier = nn.Linear(params.path_hidden_size, 2)
         self.root = nn.Parameter(torch.zeros(params.hidden_size), requires_grad=False)
+        self.dropout = nn.Dropout(params.dropout)
 
     def __fetch_sep_rep2(self, ten_output, seq_index):
         batch, seq_len, hidden_size = ten_output.shape
@@ -98,6 +167,7 @@ class RSTask(nn.Module):
         sentences = self.__fetch_sep_rep2(cls_embedding[0], pad_sep_index_list)
         nodes = torch.cat((self.root.expand(batch_size, 1, sentences.size(-1)),
                            sentences.reshape(batch_size, edu_num, -1)), dim=1)
+        nodes =  self.dropout(nodes)
         # 池化predicted_path 
         predicted_path = torch.mean(predicted_path, dim=2)
         if self.params.only_SABERT or self.params.only_BERT:# 仅仅使用cls_embedding 进行分类
@@ -170,17 +240,21 @@ class TaskSpecificNetwork1(nn.Module):
         elif tasktype == 'ou15_rs':
             scores,  label_scores = self.Ou15RSNetwork(rep_x, structure_path, sep_index_list)
             output = (scores, label_scores)
-        elif tasktype == 'hu_si':
+        elif tasktype == 'hu_si':#  cls_embedding, predicted_path, sep_index_list
             scores,  label_scores = self.HuSINetwork(predict_path, batch, node_num)
+            # scores,  label_scores = self.HuSINetwork(rep_x, predict_path, sep_index_list)
             output = (scores, label_scores)
         elif tasktype == 'ou5_si':
             scores,   label_scores = self.Ou5SINetwork(predict_path, batch, node_num)
+            # scores,   label_scores = self.Ou5SINetwork(rep_x, predict_path, sep_index_list)
             output = (scores, label_scores)
         elif tasktype == 'ou10_si':
             scores,   label_scores = self.Ou10SINetwork(predict_path, batch, node_num)
+            # scores,   label_scores = self.Ou10SINetwork(rep_x, predict_path, sep_index_list)
             output = (scores, label_scores)
         elif tasktype == 'ou15_si':
             scores,  label_scores = self.Ou15SINetwork(predict_path, batch, node_num)
+            # scores,  label_scores = self.Ou15SINetwork(rep_x, predict_path, sep_index_list)
             output = (scores, label_scores)
         return output
 
@@ -592,7 +666,7 @@ class PolicyNetwork(nn.Module):
                 texts.cuda(), input_mask.cuda(), segment_ids.cuda(),speaker_ids.cuda(), graphs.cuda(), speakers.cuda(), turns.cuda(), edu_nums.cuda()
             mask = get_mask(edu_nums + 1, self.args.max_edu_dist).cuda()
             with torch.no_grad():
-                link_scores, label_scores = self.critic.task_output(tasktype, texts, input_mask, segment_ids,speaker_ids,
+                link_scores, label_scores = self.critic.task_output(tasktype, texts, input_mask, segment_ids, speaker_ids,
                                                                     sep_index,edu_nums, speakers, turns)
 
             eval_link_loss, eval_label_loss = compute_loss(link_scores, label_scores, graphs, mask)
@@ -609,7 +683,6 @@ class PolicyNetwork(nn.Module):
                                             dim=-1)
             predicted_links = predicted_links[:, 1:] - 1
             predicted_labels = predicted_labels[:, 1:]
-
             for i in range(batch_size):
                 hp_pairs = {}
                 step = edu_nums[i].item()-1
@@ -617,13 +690,13 @@ class PolicyNetwork(nn.Module):
                 link = predicted_links[i][step].item()
                 label = predicted_labels[i][step].item()
                 hp_pairs[(link, step)] = label
-
                 predicted_result = {'hypothesis': hp_pairs,
                                     'reference': pairs[i],
                                     'edu_num': step}
                 # predicted_result['id'] = ids[i]
                 total_result_dic[ids[i]] = predicted_result
-
+            if self.args.debug:
+                break
         evaluateAddressTo = EvaluateAddressTo()
         Pat1, Pat1 = evaluateAddressTo.get_Pat1AndSessAcc(total_result_dic, self.args.source_file, type='si')
         a, b = zip(*accum_eval_link_loss)

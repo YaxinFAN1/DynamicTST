@@ -211,7 +211,7 @@ if __name__ == '__main__':
 
             test_dataset_hu_si = DialogueDataset(args=args, filename=args.test_hu_si_file, tokenizer=tokenizer,
                                                     mode='test', text_max_sep_len=args.utt_max_len,
-                                                    total_seq_len=args.max_hu_text_len)
+                                                    total_seq_len=args.max_hu_text_len, mask_last_speaker=True)
             test_dataset_hu_si.get_relations(relations, type2ids, id2types)
             test_dataset_hu_si.get_discourse_graph()
             # test_dataset_ou_len5 = DialogueDataset(args=args, filename=args.test_ou_len5_file, tokenizer=tokenizer,
@@ -258,10 +258,10 @@ if __name__ == '__main__':
         
 
         train_dataset_hu_si = DialogueDataset(args=args, filename= args.train_hu_si_file, tokenizer=tokenizer, mode='train',text_max_sep_len=args.utt_max_len,
-                                           total_seq_len = args.max_hu_text_len)
+                                           total_seq_len = args.max_hu_text_len,mask_last_speaker=True)
         
         eval_dataset_hu_si = DialogueDataset(args=args, filename= args.eval_hu_si_file, tokenizer=tokenizer, mode='eval',text_max_sep_len=args.utt_max_len,
-                                           total_seq_len = args.max_hu_text_len)
+                                           total_seq_len = args.max_hu_text_len,mask_last_speaker=True)
 
         # train_dataset_ou5 = DialogueDataset(args=args, filename=args.train_ou5_file, tokenizer=tokenizer,
         #                                          mode='train', text_max_sep_len=args.utt_max_len,
@@ -607,6 +607,8 @@ if __name__ == '__main__':
             total_hu_loss += hu_link_rs_loss
             step += 1
             if step % args.report_step == 0:
+                # Pat1, _ = model.compute_SI_Pat1_and_loss_reward(tasktype='hu_si',
+                #                                                       eval_dataloader=eval_dataloader_hu_si)
                 print('\t{} step hu loss: {:.4f} '.format(step, total_hu_loss / args.report_step))
                 total_hu_loss = 0
             if args.debug:
@@ -797,12 +799,11 @@ if __name__ == '__main__':
         for epoch in range(args.TST_epoches):
             # print('{} epoch TST finetuning..'.format(epoch + 1))
             model.train() 
-
             MultiTaskLearning(model, '',
                             '',
                             '',
                             '',
-                            train_dataloader_hu_ar,
+                            train_dataloader_hu_si,
                             '', 
                             '',
                             '', 
@@ -830,10 +831,8 @@ if __name__ == '__main__':
             #     max_reward = total_eval_loss
             #     max_epoch = epoch
 
-            Pat1, SessAcc = model.compute_Pat1_and_loss_reward(tasktype='hu_si',
+            Pat1, _ = model.compute_SI_Pat1_and_loss_reward(tasktype='hu_si',
                                                                       eval_dataloader=eval_dataloader_hu_si)
-           
-           
             if Pat1 > max_reward:
                 torch.save(model.state_dict(), args.TST_model_path + '.pt')
                 max_reward = Pat1
@@ -855,9 +854,16 @@ if __name__ == '__main__':
                 
         test_dataloader_hu_ar = DataLoader(dataset=test_dataset_hu_ar, batch_size=args.hu_pool_size, shuffle=False,
                                             collate_fn=eval_collate_fn_mol)
-        
         test_dataloader_hu_si = DataLoader(dataset=test_dataset_hu_si, batch_size=args.hu_pool_size, shuffle=False,
                                             collate_fn=eval_collate_fn_mol)
+        
+        # eval_dataset_hu_si = DialogueDataset(args=args, filename= args.eval_hu_si_file, tokenizer=tokenizer, mode='eval',text_max_sep_len=args.utt_max_len,
+        #                                    total_seq_len = args.max_hu_text_len,mask_last_speaker=True)
+        # eval_dataset_hu_si.get_relations(relations, type2ids, id2types)
+        # eval_dataset_hu_si.get_discourse_graph()
+        # eval_dataloader_hu_si = DataLoader(dataset=eval_dataset_hu_si, batch_size=args.hu_pool_size, shuffle=False,
+        #                                     collate_fn=eval_collate_fn_mol)
+       
         pretrained_model = BertWithSpeakerID(args) # bert_model_name, speaker_id_dim, num_speakers 
         model = PolicyNetwork(args=args, pretrained_model=pretrained_model)
         model = model.to(args.device)

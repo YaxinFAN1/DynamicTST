@@ -57,8 +57,8 @@ CUDA_VISIBLE_DEVICES=${GPU}  nohup python -u main.py \
                                     --hu_batch_size 1024 \
                                     --dataset_dir=$dataset_dir  \
                                     --do_train \
-                                    --TST_epoches 5 \
+                                    --TST_epoches 10 \
                                     --source_file=$eval_hu_si_file \
-                                    --ST_model_path "${model_dir}/hu_si_bert_ssa_withoutGRU" \
-                                    --TST_model_path "${model_dir}/hu_si_bert_ssa_withoutGRU" \
-                                    --seed 65534 > ./logs/hu_si_bert_ssa_withoutGRU.log 2>&1 &
+                                    --ST_model_path "${model_dir}/hu_si_BERT_SSA" \
+                                    --TST_model_path "${model_dir}/hu_si_BERT_SSA" \
+                                    --seed 65534 > ./logs/hu_si_BERT_SSA.log 2>&1 &
