@@ -309,12 +309,9 @@ class EvaluateAddressTo:
         """
         P_total = P_correct = 0
         for id, value in datadic.items():
-            print('datadic_')
             hypo = list(value['hypothesis'].keys())
             assert len(hypo)==1
             ref = list(value['reference'].keys())
-            print(hypo)
-            print(ref)
             P_total += 1
             if hypo[0] in ref:
                 P_correct +=1

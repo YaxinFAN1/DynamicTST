@@ -13,11 +13,13 @@ class BaseNetwork(nn.Module):
         super(BaseNetwork, self).__init__()
         self.pretrained_model = pretrained_model
 
-    def forward(self, texts, input_mask, segment_ids,speaker_ids):
+
+    def forward(self, texts, input_mask, segment_ids, speaker_ids, withSpkembedding):
         output = self.pretrained_model(input_ids = texts,
                              attention_mask = input_mask, 
                              token_type_ids = segment_ids,
-                            speaker_ids = speaker_ids)
+                            speaker_ids = speaker_ids,
+                            withSpkembedding =  withSpkembedding)
         return output
 
 class ParsingTask(nn.Module):
@@ -120,16 +122,16 @@ class RSTask(nn.Module):
     def __init__(self, params):
         super(RSTask, self).__init__()
         self.params = params
-        if self.params.only_SABERT or self.params.only_BERT:# 仅仅使用cls_embedding 进行分类
-            self.classifier = nn.Linear(params.hidden_size, 2)
-        else:
-            if params.with_spk_embedding:
-                if self.params.cat_cls_structurePath:
-                    self.classifier = nn.Linear(params.hidden_size + params.path_hidden_size, 2)
-                else:
-                     self.classifier = nn.Linear(params.path_hidden_size, 2)
-            else:
-                self.classifier = nn.Linear(params.path_hidden_size, 2)
+        # if self.params.only_SABERT or self.params.only_BERT:# 仅仅使用cls_embedding 进行分类
+        #     self.classifier = nn.Linear(params.hidden_size, 2)
+        # else:
+            # if params.with_spk_embedding:
+                # if self.params.cat_cls_structurePath:
+        # self.classifier = nn.Linear(params.hidden_size + params.path_hidden_size, 2)
+                # else:
+        self.classifier = nn.Linear(params.path_hidden_size, 2)
+            # else:
+            #     self.classifier = nn.Linear(params.path_hidden_size, 2)
         self.root = nn.Parameter(torch.zeros(params.hidden_size), requires_grad=False)
         self.dropout = nn.Dropout(params.dropout)
 
@@ -170,23 +172,23 @@ class RSTask(nn.Module):
         nodes =  self.dropout(nodes)
         # 池化predicted_path 
         predicted_path = torch.mean(predicted_path, dim=2)
-        if self.params.only_SABERT or self.params.only_BERT:# 仅仅使用cls_embedding 进行分类
-            output  = cls_embedding[0]
-        else: # 仅仅使用structure path的平均池化，或者拼接cls_embedding 和structure path
-            if self.params.with_spk_embedding:
-                if self.params.cat_cls_structurePath:
-                    output = torch.cat((nodes, predicted_path),dim=-1)
-                else:
-                    output = predicted_path
-            else:
-                output = predicted_path
-        # 拼接cls_embedding,structure path
-        return self.classifier(output[:,0,:]),  \
+        # if self.params.only_SABERT or self.params.only_BERT:# 仅仅使用cls_embedding 进行分类
+        #     output  = cls_embedding[0]
+        # else: # 仅仅使用structure path的平均池化，或者拼接cls_embedding 和structure path
+        #     if self.params.with_spk_embedding:
+        #         if self.params.cat_cls_structurePath:
+        #             output = torch.cat((nodes, predicted_path),dim=-1)
+        #         else:
+        #             output = predicted_path
+        #     else:
+        #         output = predicted_path
+        # # 拼接cls_embedding,structure path
+        return self.classifier(predicted_path[:,0,:]),  \
                ''
     # self.link_classifier(predicted_path).reshape(batch_size, node_num, node_num),
 
 class TaskSpecificNetwork1(nn.Module):
-    def __init__(self, params, pretained_model ):
+    def __init__(self, params, pretained_model):
         super(TaskSpecificNetwork1, self).__init__()
         self.base_network = BaseNetwork(pretained_model)
         self.SSAModule  = SSAModule(params)
@@ -204,8 +206,8 @@ class TaskSpecificNetwork1(nn.Module):
         self.Ou10RSNetwork = RSTask(params)
         self.Ou15RSNetwork = RSTask(params)
 
-    def forward(self, tasktype, texts,input_mask, segment_ids, speaker_ids, sep_index_list, edu_nums, speakers, turns):
-        rep_x = self.base_network(texts, input_mask,  segment_ids,speaker_ids)
+    def forward(self, tasktype, texts,input_mask, segment_ids, speaker_ids, sep_index_list, edu_nums, speakers, turns, withSpkembedding):
+        rep_x = self.base_network(texts, input_mask,  segment_ids,speaker_ids, withSpkembedding)
         predict_path, structure_path, batch, node_num = self.SSAModule(rep_x, sep_index_list,
                                     edu_nums, speakers, turns)
         if tasktype == 'parsing':
@@ -281,15 +283,15 @@ class CriticNetwork(nn.Module):
         nn.init.xavier_uniform_(self.critic_layer.weight)
         self.nl = nn.Tanh()
 
-    def forward(self, x, att_mask, segment_ids):
-        x_out = self.task_model.base_network(x,att_mask,segment_ids)[0][:, 0, :].detach()
+    def forward(self, x, att_mask, segment_ids, withSpkembedding):
+        x_out = self.task_model.base_network(x, att_mask, segment_ids, withSpkembedding)[0][:, 0, :].detach()
         c_in = self.nl(self.ff1(x_out))
         out = torch.sigmoid(self.critic_layer(c_in))
         out = torch.mean(out)
         return x_out, out
 
-    def task_output(self, tasktype, texts, input_mask, segment_ids, speaker_ids,  sep_index_list, edu_nums, speakers, turns):
-        return self.task_model(tasktype, texts, input_mask, segment_ids, speaker_ids, sep_index_list, edu_nums, speakers, turns)
+    def task_output(self, tasktype, texts, input_mask, segment_ids, speaker_ids,  sep_index_list, edu_nums, speakers, turns, withSpkembedding):
+        return self.task_model(tasktype, texts, input_mask, segment_ids, speaker_ids, sep_index_list, edu_nums, speakers, turns, withSpkembedding)
 
 class PolicyNetwork(nn.Module):
     def __init__(self, args, pretrained_model):
@@ -590,7 +592,7 @@ class PolicyNetwork(nn.Module):
         action_probs = self.actor(batch_rep)
         return action_probs, batch_rep, exp_reward
     
-    def compute_Pat1_and_loss_reward(self, tasktype, eval_dataloader):
+    def compute_Pat1_and_loss_reward(self, tasktype, eval_dataloader,source_file):
         eval_matrix = {
             'hypothesis': None,
             'reference': None,
@@ -606,7 +608,7 @@ class PolicyNetwork(nn.Module):
             mask = get_mask(edu_nums + 1, self.args.max_edu_dist).cuda()
             with torch.no_grad():
                 link_scores, label_scores = self.critic.task_output(tasktype, texts, input_mask, segment_ids,speaker_ids,
-                                                                    sep_index,edu_nums, speakers, turns)
+                                                                    sep_index,edu_nums, speakers, turns,withSpkembedding=False)
 
             eval_link_loss, eval_label_loss = compute_loss(link_scores, label_scores, graphs, mask)
             accum_eval_link_loss.append((eval_link_loss.sum(), eval_link_loss.size(-1)))
@@ -638,8 +640,10 @@ class PolicyNetwork(nn.Module):
                 # predicted_result['id'] = ids[i]
                 total_result_dic[ids[i]] = predicted_result
                 record_eval_result(eval_matrix, predicted_result)
+            if self.args.debug:
+                break
         evaluateAddressTo = EvaluateAddressTo()
-        Pat1, SessAcc = evaluateAddressTo.get_Pat1AndSessAcc(total_result_dic, self.args.source_file,type='ar')
+        Pat1, SessAcc = evaluateAddressTo.get_Pat1AndSessAcc(total_result_dic, source_file, type='ar')
         a, b = zip(*accum_eval_link_loss)
         c, d = zip(*accum_eval_label_loss)
         eval_link_loss, eval_label_loss = sum(a) / sum(b), sum(c) / sum(d)
@@ -647,10 +651,9 @@ class PolicyNetwork(nn.Module):
             total_loss = eval_link_loss
             total_f1 = SessAcc
         print('Pat1 is {}, SessAcc is {}'.format(Pat1, SessAcc))
-        print('link loss is {}, rel loss is {}'.format(eval_link_loss, eval_label_loss))
-        return Pat1, SessAcc
+        return Pat1, SessAcc, eval_link_loss
 
-    def compute_SI_Pat1_and_loss_reward(self, tasktype, eval_dataloader):
+    def compute_SI_Pat1_and_loss_reward(self, tasktype, eval_dataloader, source_file):
         #只找最后一个utterance的确定的spk，golden是spk的数量，不是utterance的数量
         eval_matrix = {
             'hypothesis': None,
@@ -667,7 +670,7 @@ class PolicyNetwork(nn.Module):
             mask = get_mask(edu_nums + 1, self.args.max_edu_dist).cuda()
             with torch.no_grad():
                 link_scores, label_scores = self.critic.task_output(tasktype, texts, input_mask, segment_ids, speaker_ids,
-                                                                    sep_index,edu_nums, speakers, turns)
+                                                                    sep_index,edu_nums, speakers, turns,withSpkembedding=False)
 
             eval_link_loss, eval_label_loss = compute_loss(link_scores, label_scores, graphs, mask)
             accum_eval_link_loss.append((eval_link_loss.sum(), eval_link_loss.size(-1)))
@@ -698,12 +701,12 @@ class PolicyNetwork(nn.Module):
             if self.args.debug:
                 break
         evaluateAddressTo = EvaluateAddressTo()
-        Pat1, Pat1 = evaluateAddressTo.get_Pat1AndSessAcc(total_result_dic, self.args.source_file, type='si')
+        Pat1, Pat1 = evaluateAddressTo.get_Pat1AndSessAcc(total_result_dic, source_file, type='si')
         a, b = zip(*accum_eval_link_loss)
         c, d = zip(*accum_eval_label_loss)
         eval_link_loss, eval_label_loss = sum(a) / sum(b), sum(c) / sum(d)
         print('Pat1 is {}'.format(Pat1))
-        return Pat1, Pat1
+        return Pat1, eval_link_loss
 
 
 
@@ -726,7 +729,7 @@ class PolicyNetwork(nn.Module):
 
             with torch.no_grad():
                 scores, _ = self.critic.task_output(tasktype, texts, input_mask, segment_ids, speaker_ids, sep_index_list,
-                                                                edu_nums, speakers, turns)
+                                                                edu_nums, speakers, turns,withSpkembedding=True)
             loss = self.loss_fns[tasktype](scores, labels)
             predict_label1 = torch.max(scores.data, 1)[1].cpu().numpy()
             accum_eval_link_loss += loss.item()
@@ -755,7 +758,7 @@ class PolicyNetwork(nn.Module):
         return eval_loss, epoch_f1
     
     
-    def compute_RS_P_at_1(self, results,):
+    def compute_RS_P_at_1(self, results):
         """
         results = [id, label, score]
         """
@@ -793,7 +796,7 @@ class PolicyNetwork(nn.Module):
             mask = get_mask(node_num=edu_nums + 1, max_edu_dist=self.args.max_edu_dist).cuda()
             with torch.no_grad():
                 link_scores, label_scores = self.critic.task_output(tasktype, texts, input_mask, segment_ids, speaker_ids, sep_index,
-                                                                edu_nums, speakers, turns)
+                                                                edu_nums, speakers, turns,withSpkembedding=False)
 
             eval_link_loss, eval_label_loss = compute_loss(link_scores, label_scores, graphs, mask)
             accum_eval_link_loss.append((eval_link_loss.sum(), eval_link_loss.size(-1)))
@@ -820,6 +823,8 @@ class PolicyNetwork(nn.Module):
                                     'reference': pairs[i],
                                     'edu_num': step}
                 record_eval_result(eval_matrix, predicted_result)
+            if self.args.debug:
+                break
         f1_bi, f1_multi = tsinghua_F1(eval_matrix)
         a, b = zip(*accum_eval_link_loss)
         c, d = zip(*accum_eval_label_loss)
@@ -849,7 +854,7 @@ class PolicyNetwork(nn.Module):
             mask = get_mask(node_num=edu_nums + 1, max_edu_dist=self.args.max_edu_dist).cuda()
             with torch.no_grad():
                 link_scores, label_scores = self.critic.task_output(tasktype, texts, input_mask, segment_ids,  sep_index,
-                                                                edu_nums, speakers, turns)
+                                                                edu_nums, speakers, turns,withSpkembedding=False)
 
             eval_link_loss, eval_label_loss = compute_loss(link_scores, label_scores, graphs, mask)
             accum_eval_link_loss.append((eval_link_loss.sum(), eval_link_loss.size(-1)))
@@ -891,7 +896,7 @@ class PolicyNetwork(nn.Module):
         print('tasktype {}, link loss is {}'.format(tasktype, eval_link_loss))
         return total_loss, total_f1
     
-    def train_minibatch(self, task_type, batch):
+    def train_minibatch(self, task_type, batch, withSpkembedding=False):
         accum_train_link_loss = accum_train_label_loss = 0
         for mini_batch in batch:
             texts, input_mask, segment_ids, speaker_ids, sep_index, pairs, graphs, speakers, turns, edu_nums = mini_batch
@@ -899,7 +904,7 @@ class PolicyNetwork(nn.Module):
                     texts.cuda(), input_mask.cuda(), segment_ids.cuda(), speaker_ids.cuda(), graphs.cuda(), speakers.cuda(), turns.cuda(), edu_nums.cuda()
             mask = get_mask(node_num=edu_nums + 1, max_edu_dist=self.args.max_edu_dist).cuda()
             link_scores, label_scores = self.critic.task_output(task_type, texts, input_mask, segment_ids, speaker_ids,  sep_index,
-                                                                edu_nums, speakers, turns)
+                                                                edu_nums, speakers, turns, withSpkembedding=withSpkembedding)
             if task_type == 'hu_rs' or task_type == 'ou5_rs' or task_type == 'ou10_rs' or task_type == 'ou15_rs':
                 link_loss = self.loss_fns[task_type](link_scores, graphs)
                 label_loss = torch.tensor([0]) #default
@@ -924,14 +929,14 @@ class PolicyNetwork(nn.Module):
                 break
         return accum_train_link_loss, accum_train_label_loss
 
-    def train_minibatch_rl(self, task_type, batch):
+    def train_minibatch_rl(self, task_type, batch,withSpkembedding=False):
         accum_train_link_loss = accum_train_label_loss = 0
         texts, input_mask, segment_ids, labels, sep_index, pairs, graphs, speakers, turns, edu_nums = batch
         texts, input_mask, segment_ids, graphs, speakers, turns, edu_nums = \
                 texts.cuda(), input_mask.cuda(), segment_ids.cuda(), graphs.cuda(), speakers.cuda(), turns.cuda(), edu_nums.cuda()
         mask = get_mask(node_num=edu_nums + 1, max_edu_dist=self.args.max_edu_dist).cuda()
         link_scores, label_scores = self.critic.task_output(task_type, texts, input_mask, segment_ids,  sep_index,
-                                                            edu_nums, speakers, turns)
+                                                            edu_nums, speakers, turns,withSpkembedding=withSpkembedding)
         link_loss, label_loss = compute_loss(link_scores.clone(), label_scores.clone(), graphs, mask)
         link_loss = link_loss.mean()
         label_loss = label_loss.mean()
@@ -946,14 +951,14 @@ class PolicyNetwork(nn.Module):
         accum_train_label_loss += label_loss.item()
         return accum_train_link_loss, accum_train_label_loss
 
-    def train_minibatch_optim_link_rl(self, task_type, batch):
+    def train_minibatch_optim_link_rl(self, task_type, batch, withSpkembedding):
         accum_train_link_loss = accum_train_label_loss = 0
         texts, input_mask, segment_ids, labels, sep_index, pairs, graphs, speakers, turns, edu_nums,ex_ids = batch
         texts, input_mask, segment_ids, graphs, speakers, turns, edu_nums = \
             texts.cuda(), input_mask.cuda(), segment_ids.cuda(), graphs.cuda(), speakers.cuda(), turns.cuda(), edu_nums.cuda()
         mask = get_mask(node_num=edu_nums + 1, max_edu_dist=self.args.max_edu_dist).cuda()
         link_scores, label_scores = self.critic.task_output(task_type, texts, input_mask, segment_ids, sep_index,
-                                                            edu_nums, speakers, turns)
+                                                            edu_nums, speakers, turns,withSpkembedding=withSpkembedding)
         link_loss, label_loss = compute_loss(link_scores.clone(), label_scores.clone(), graphs, mask)
         link_loss = link_loss.mean()
         label_loss = label_loss.mean()

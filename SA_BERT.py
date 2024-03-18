@@ -29,7 +29,7 @@ class BertWithSpeakerID(nn.Module):
         # 假设BERT的hidden_size与speaker_id_dim一致
         self.embedding_size = self.bert.config.hidden_size
 
-    def forward(self, input_ids, token_type_ids, attention_mask, speaker_ids):
+    def forward(self, input_ids, token_type_ids, attention_mask, speaker_ids, withSpkembedding):
         # 获取BERT的基础embeddings
         inputs_embeds = self.bert.embeddings.word_embeddings(input_ids)
         token_type_embeddings = self.bert.embeddings.token_type_embeddings(token_type_ids)
@@ -38,7 +38,9 @@ class BertWithSpeakerID(nn.Module):
         # 获取speaker_id embeddings
         speaker_embeds = self.speaker_embeddings(speaker_ids)
         
-        if self.params.with_spk_embedding or self.params.only_SABERT:
+        if withSpkembedding:
+            # print('with_spkEmbedding')
+            # print(withSpkembedding)
         # 将所有embeddings相加
             embeddings = inputs_embeds + token_type_embeddings + position_embeddings + speaker_embeds
         else:

@@ -193,12 +193,22 @@ class DialogueDataset(Dataset):
         total_speaker_ids.append(new_speaker_ids[-1][-1])
         segment_ids = [0]*len(total_tokens)
         input_mask = [1] * len(total_tokens)
+        # print(len(total_tokens))
         gap = self.total_seq_len - len(total_tokens)
+        assert gap >0
+       
         # fill the gap
         total_tokens = total_tokens + ['[PAD]'] * gap
         segment_ids = segment_ids + [0] * gap
         input_mask = input_mask + [0] * gap
         total_speaker_ids = total_speaker_ids + [0]*gap 
+        # print('len_texts')
+        # print(len(texts))
+        # print(texts)
+        # print(total_tokens)
+        # print(segment_ids)
+        # print(input_mask)
+        # print(total_speaker_ids)
         assert len(total_tokens) == self.total_seq_len
         assert len(segment_ids) == self.total_seq_len
         assert len(input_mask) == self.total_seq_len

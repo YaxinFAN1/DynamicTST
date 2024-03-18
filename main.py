@@ -8,6 +8,7 @@ from Model import PolicyNetwork
 from dialogue_dataset import DialogueDataset, RSdataset
 from SA_BERT import BertWithSpeakerID
 from tqdm import tqdm
+import torch.nn as nn
 import torch.nn.functional as F
 from utils import *
 
@@ -124,7 +125,7 @@ if __name__ == '__main__':
     parser.add_argument('--hdim', type=int, default= 384)
     parser.add_argument('--debug', action="store_true")
     parser.add_argument('--seed', type=int, default= 512)
-    parser.add_argument('--with_spk_embedding', action="store_true")
+    parser.add_argument('--withSpkembedding', action="store_true")
     parser.add_argument('--only_SABERT', action="store_true")
     parser.add_argument('--only_BERT', action="store_true")
     parser.add_argument('--cat_cls_structurePath', action="store_true")
@@ -184,6 +185,10 @@ if __name__ == '__main__':
 
             train_dataset_hu_si = torch.load(train_hu_si_file)
             eval_dataset_hu_si = torch.load(eval_hu_si_file)
+
+
+            train_dataset_hu_rs = torch.load(train_hu_rs_file)
+            eval_dataset_hu_rs = torch.load(eval_hu_rs_file)
             # train_dataset_ou5 = torch.load(train_ou5_file)
             # train_dataset_ou10 = torch.load(train_ou10_file)
             # train_dataset_ou15 = torch.load(train_ou15_file)
@@ -201,8 +206,10 @@ if __name__ == '__main__':
             test_dataset_mol = DialogueDataset(args=args, filename=args.test_mol_file, tokenizer=tokenizer,
                                                    mode='test', text_max_sep_len=args.utt_max_len,
                                                    total_seq_len=args.max_mol_text_len)
+            
             test_dataset_mol.get_relations(relations, type2ids, id2types)
             test_dataset_mol.get_discourse_graph()
+
             test_dataset_hu_ar = DialogueDataset(args=args, filename=args.test_hu_ar_file, tokenizer=tokenizer,
                                                     mode='test', text_max_sep_len=args.utt_max_len,
                                                     total_seq_len=args.max_hu_text_len)
@@ -214,6 +221,13 @@ if __name__ == '__main__':
                                                     total_seq_len=args.max_hu_text_len, mask_last_speaker=True)
             test_dataset_hu_si.get_relations(relations, type2ids, id2types)
             test_dataset_hu_si.get_discourse_graph()
+               
+            test_dataset_hu_rs = RSdataset( 
+                                            filename=args.test_hu_rs_file, 
+                                            tokenizer=tokenizer,
+                                            total_seq_len=args.max_hu_text_len,
+                                            text_max_sep_len=args.utt_max_len,
+                                            filetype='test')
             # test_dataset_ou_len5 = DialogueDataset(args=args, filename=args.test_ou_len5_file, tokenizer=tokenizer,
             #                                   mode='test', text_max_sep_len=args.utt_max_len,
             #                                   total_seq_len=args.max_ou5_text_len)
@@ -241,27 +255,46 @@ if __name__ == '__main__':
             #                                 total_seq_len=args.max_ou15_text_len,
             #                                 text_max_sep_len=args.utt_max_len,
             #                                 filetype='test')
-            
-            # test_dataset_hu_rs = RSdataset( 
-            #                                 filename=args.test_hu_rs_file, 
-            #                                 tokenizer=tokenizer,
-            #                                 total_seq_len=args.max_hu_text_len,
-            #                                 text_max_sep_len=args.utt_max_len,
-            #                                 filetype='test')
+         
 
     else:
+        
+        train_dataset_mol = DialogueDataset(args=args, filename=args.train_mol_file, tokenizer=tokenizer, mode='train',
+                                        text_max_sep_len=args.utt_max_len,
+                                        total_seq_len=args.max_mol_text_len)
+
+        eval_dataset_mol = DialogueDataset(args=args, filename=args.eval_mol_file, tokenizer=tokenizer, mode='eval',
+                                           text_max_sep_len=args.utt_max_len,
+                                           total_seq_len = args.max_mol_text_len)
+
         train_dataset_hu_ar = DialogueDataset(args=args, filename= args.train_hu_ar_file, tokenizer=tokenizer, mode='train',text_max_sep_len=args.utt_max_len,
-                                           total_seq_len = args.max_hu_text_len)
+                                           total_seq_len = args.max_mol_text_len)
         
         eval_dataset_hu_ar = DialogueDataset(args=args, filename= args.eval_hu_ar_file, tokenizer=tokenizer, mode='eval',text_max_sep_len=args.utt_max_len,
-                                           total_seq_len = args.max_hu_text_len)
+                                           total_seq_len = args.max_mol_text_len)
         
 
         train_dataset_hu_si = DialogueDataset(args=args, filename= args.train_hu_si_file, tokenizer=tokenizer, mode='train',text_max_sep_len=args.utt_max_len,
-                                           total_seq_len = args.max_hu_text_len,mask_last_speaker=True)
+                                           total_seq_len = args.max_mol_text_len,mask_last_speaker=True)
         
         eval_dataset_hu_si = DialogueDataset(args=args, filename= args.eval_hu_si_file, tokenizer=tokenizer, mode='eval',text_max_sep_len=args.utt_max_len,
-                                           total_seq_len = args.max_hu_text_len,mask_last_speaker=True)
+                                           total_seq_len = args.max_mol_text_len,mask_last_speaker=True)
+
+
+
+        train_dataset_hu_rs = RSdataset(
+                                            filename=args.train_hu_rs_file, 
+                                            tokenizer=tokenizer,
+                                            total_seq_len=args.max_mol_text_len,
+                                            text_max_sep_len=args.utt_max_len,
+                                            filetype='train')
+        
+        eval_dataset_hu_rs = RSdataset(
+                                            filename=args.eval_hu_rs_file, 
+                                            tokenizer=tokenizer,
+                                            total_seq_len=args.max_mol_text_len,
+                                            text_max_sep_len=args.utt_max_len,
+                                            filetype='eval')
 
         # train_dataset_ou5 = DialogueDataset(args=args, filename=args.train_ou5_file, tokenizer=tokenizer,
         #                                          mode='train', text_max_sep_len=args.utt_max_len,
@@ -299,27 +332,8 @@ if __name__ == '__main__':
         #                                     filetype='train')
 
    
-        # train_dataset_hu_rs = RSdataset(
-        #                                     filename=args.train_hu_rs_file, 
-        #                                     tokenizer=tokenizer,
-        #                                     total_seq_len=args.max_hu_text_len,
-        #                                     text_max_sep_len=args.utt_max_len,
-        #                                     filetype='train')
-        
-        # eval_dataset_hu_rs = RSdataset(
-        #                                     filename=args.eval_hu_rs_file, 
-        #                                     tokenizer=tokenizer,
-        #                                     total_seq_len=args.max_hu_text_len,
-        #                                     text_max_sep_len=args.utt_max_len,
-        #                                     filetype='eval')
-
-        train_dataset_mol = DialogueDataset(args=args, filename=args.train_mol_file, tokenizer=tokenizer, mode='train',
-                                        text_max_sep_len=args.utt_max_len,
-                                        total_seq_len=args.max_mol_text_len)
-
-        eval_dataset_mol = DialogueDataset(args=args, filename=args.eval_mol_file, tokenizer=tokenizer, mode='eval',
-                                           text_max_sep_len=args.utt_max_len,
-                                           total_seq_len = args.max_mol_text_len)
+     
+      
 
         relations = train_dataset_mol.relations | train_dataset_mol.relations
         type2ids, id2types = DialogueDataset.format_relations(relations)
@@ -358,11 +372,12 @@ if __name__ == '__main__':
         torch.save(eval_dataset_hu_ar, eval_hu_ar_file)
         torch.save(train_dataset_hu_si, train_hu_si_file)
         torch.save(eval_dataset_hu_si, eval_hu_si_file)
+        torch.save(train_dataset_hu_rs, train_hu_rs_file)
+        torch.save(eval_dataset_hu_rs, eval_hu_rs_file)
         # torch.save(train_dataset_ou5, train_ou5_file)
         # torch.save(train_dataset_ou10, train_ou10_file)
         # torch.save(train_dataset_ou15, train_ou15_file)
-        # torch.save(train_dataset_hu_rs, train_hu_rs_file)
-        # torch.save(eval_dataset_hu_rs, eval_hu_rs_file)
+      
         # torch.save(train_dataset_ou5_rs, train_ou5_rs_file)
         # torch.save(train_dataset_ou10_rs, train_ou10_rs_file)
         # torch.save(train_dataset_ou15_rs, train_ou15_rs_file)
@@ -543,93 +558,73 @@ if __name__ == '__main__':
         return pool(examples)
 
 
-    def MultiTaskLearning(mtl_model, train_hu_ar_dataloader, train_ou5_ar_dataloader,
-                                        train_ou10_ar_dataloader, train_ou15_ar_dataloader, 
-                                        train_hu_si_dataloader, train_ou5_si_dataloader,
-                                        train_ou10_si_dataloader, train_ou15_si_dataloader, 
-                                        train_hu_rs_dataloader, train_ou5_rs_dataloader,
-                                        train_ou10_rs_dataloader, train_ou15_rs_dataloader,
-                                        train_mol_dataloader):
+    def MultiTaskLearning(mtl_model, train_hu_ar_dataloader=None, train_ou5_ar_dataloader=None,
+                                        train_ou10_ar_dataloader=None, train_ou15_ar_dataloader=None, 
+                                        train_hu_si_dataloader=None, train_ou5_si_dataloader=None,
+                                        train_ou10_si_dataloader=None, train_ou15_si_dataloader=None, 
+                                        train_hu_rs_dataloader=None, train_ou5_rs_dataloader=None,
+                                        train_ou10_rs_dataloader=None, train_ou15_rs_dataloader=None,
+                                        train_mol_dataloader=None):
         step = 0
-        total_hu_loss = total_ou5_loss = total_ou10_loss = total_ou15_loss = total_molweni_link_loss = total_molweni_rel_loss = 0
-        total_hu_rs_loss = total_ou5_rs_loss = total_ou10_rs_loss = total_ou15_rs_loss = 0
-        
-        # train hu RS
-        # for hu_rs_data_batch in tqdm(train_hu_rs_dataloader):
-        #     hu_rs_link_loss, _ = \
-        #         mtl_model.train_minibatch('hu_rs', hu_rs_data_batch)
-        #     total_hu_rs_loss += hu_rs_link_loss
-        #     step += 1
-        #     if step % args.report_step == 0:
-        #         print('\t{} step hu rs loss: {:.4f} '.format(step, total_hu_rs_loss / args.report_step))
-        #         total_hu_rs_loss = 0
-        #     if args.debug:
-        #         break 
-        
-        # #train ou5
-        # for ou5_data_batch in tqdm(train_ou5_dataloader):
-        #     ou5_link_rs_loss, _ = \
-        #         mtl_model.train_minibatch('ou5_ar', ou5_data_batch)
-        #     total_ou5_loss += ou5_link_rs_loss
-        #     step += 1
-        #     if step % args.report_step == 0:
-        #         print('\t{} step ou5 loss: {:.4f} '.format(step, total_ou5_loss / args.report_step))
-        #         total_ou5_loss = 0
-        #     if args.debug:
-        #         break 
-        
-        #train ou10
-        # for ou10_data_batch in tqdm(train_ou10_dataloader):
-        #     ou10_link_rs_loss, _ = \
-        #         mtl_model.train_minibatch('ou10_ar', ou10_data_batch)
-        #     total_ou10_loss += ou10_link_rs_loss
-        #     step += 1
-        #     if step % args.report_step == 0:
-        #         print('\t{} step ou10 loss: {:.4f} '.format(step, total_ou10_loss / args.report_step))
-        #         total_ou10_loss = 0
-        #     if args.debug:
-        #         break 
-        #train ou15
-        # for ou15_data_batch in tqdm(train_ou15_dataloader):
-        #     ou15_link_rs_loss, _ = \
-        #         mtl_model.train_minibatch('ou15_ar', ou15_data_batch)
-        #     total_ou15_loss += ou15_link_rs_loss
-        #     step += 1
-        #     if step % args.report_step == 0:
-        #         print('\t{} step ou15 loss: {:.4f} '.format(step, total_ou15_loss / args.report_step))
-        #         total_ou15_loss = 0
-        #     if args.debug:
-        #         break 
-        # train hu
-        for hu_data_batch in tqdm(train_hu_si_dataloader):
-            hu_link_rs_loss, _ = \
-                mtl_model.train_minibatch('hu_si', hu_data_batch)
-            total_hu_loss += hu_link_rs_loss
+        total_mol_parsing_link_loss = total_hu_ar_loss = total_hu_si_loss = total_hu_rs_loss  = 0
+        total_mol_parsing_Rel_loss  = 0
+        # total_hu_rs_loss = total_ou5_rs_loss = total_ou10_rs_loss = total_ou15_rs_loss = 0
+        print('training parsing-------------')
+        # train mol
+        for mol_data_batch in tqdm(train_mol_dataloader):
+            temp_link_mol_loss, temp_rel_mol_loss = \
+                mtl_model.train_minibatch('parsing', mol_data_batch)
+            total_mol_parsing_link_loss += temp_link_mol_loss
+            total_mol_parsing_Rel_loss += temp_rel_mol_loss
             step += 1
             if step % args.report_step == 0:
-                # Pat1, _ = model.compute_SI_Pat1_and_loss_reward(tasktype='hu_si',
-                #                                                       eval_dataloader=eval_dataloader_hu_si)
-                print('\t{} step hu loss: {:.4f} '.format(step, total_hu_loss / args.report_step))
-                total_hu_loss = 0
+                print(
+                    '\t{} mol link loss {:.4f}, rel loss {:.4f} '.format(step,
+                                  total_mol_parsing_link_loss / args.report_step,
+                                  total_mol_parsing_Rel_loss / args.report_step))
+                total_mol_parsing_link_loss = total_mol_parsing_Rel_loss = 0
             if args.debug:
                 break 
-        # train mol
-        # for mol_data_batch in tqdm(train_mol_dataloader):
-        #     temp_link_mol_loss, temp_rel_mol_loss = \
-        #         mtl_model.train_minibatch('parsing', mol_data_batch)
-        #     total_molweni_link_loss += temp_link_mol_loss
-        #     total_molweni_rel_loss += temp_rel_mol_loss
-        #     step += 1
-        #     if step % args.report_step == 0:
-        #         print(
-        #             '\t{} mol link loss {:.4f}, rel loss {:.4f} '.format(step,
-        #                           total_molweni_link_loss / args.report_step,
-        #                           total_molweni_rel_loss / args.report_step))
-        #         total_molweni_link_loss = total_molweni_rel_loss = 0
-        #     if args.debug:
-        #         break 
+        print('training hu ar-------------')
+        # #train hu ar
+        for hu_data_batch in tqdm(train_hu_ar_dataloader):
+            hu_ar_loss, _ = \
+                mtl_model.train_minibatch('hu_ar', hu_data_batch)
+            total_hu_ar_loss += hu_ar_loss
+            step += 1
+            if step % args.report_step == 0:
+                print('\t{} step hu ar loss: {:.4f} '.format(step, total_hu_ar_loss / args.report_step))
+                total_hu_ar_loss = 0
+            if args.debug:
+                break 
+        print('training hu si-------------')
+        # #train hu si
+        for hu_data_batch in tqdm(train_hu_si_dataloader):
+            hu_si_loss, _ = \
+                mtl_model.train_minibatch('hu_si', hu_data_batch)
+            total_hu_si_loss += hu_si_loss
+            step += 1
+            if step % args.report_step == 0:
+                print('\t{} step hu ar loss: {:.4f} '.format(step, total_hu_si_loss / args.report_step))
+                total_hu_si_loss = 0
+            if args.debug:
+                break 
+        print('training hu rs-------------')
+        # train hu RS
+        for hu_rs_data_batch in tqdm(train_hu_rs_dataloader):
+            hu_rs_link_loss, _ = \
+                mtl_model.train_minibatch('hu_rs', hu_rs_data_batch, withSpkembedding=True)
+            total_hu_rs_loss += hu_rs_link_loss
+            step += 1
+            if step % args.report_step == 0:
+                print('\t{} step hu rs loss: {:.4f} '.format(step, total_hu_rs_loss / args.report_step))
+                total_hu_rs_loss = 0
+            if args.debug:
+                break 
+        
+
             
-    def generate_TST_mask(args, model, task_type, train_dataloader):
+    def generate_TST_mask(args, model, task_type, train_dataloader, withSpkEmbedding=False):
         gradient_mask = dict()
         model.train()
         for name, params in model.named_parameters():
@@ -644,15 +639,22 @@ if __name__ == '__main__':
                 mask = get_mask(node_num=edu_nums + 1, max_edu_dist=args.max_edu_dist).cuda()
                 link_scores, label_scores = model.critic.task_output(task_type, texts, input_mask, segment_ids, speaker_ids,
                                                                     sep_index,
-                                                                    edu_nums, speakers, turns)
-                link_loss, label_loss = compute_loss(link_scores.clone(), label_scores.clone(), graphs, mask)
-                link_loss = link_loss.mean()
-                label_loss = label_loss.mean()
-                if task_type == 'hu_ar' or task_type == 'ou5_ar' or task_type == 'ou10_ar' or task_type == 'ou15_ar':
-
-                    loss = link_loss
-                elif task_type == 'parsing':
-                    loss = link_loss + label_loss
+                                                                    edu_nums, speakers, turns,
+                                                                    withSpkembedding=withSpkEmbedding)
+                
+                if task_type == 'hu_ar' or task_type == 'ou5_ar' or task_type == 'ou10_ar' or task_type == 'ou15_ar' or \
+                    task_type == 'hu_si' or task_type == 'ou5_si' or task_type == 'ou10_si' or task_type == 'ou15_si' or task_type == 'parsing':
+                    link_loss, label_loss = compute_loss(link_scores.clone(), label_scores.clone(), graphs, mask)
+                    link_loss = link_loss.mean()
+                    label_loss = label_loss.mean()
+                    if task_type=='parsing':
+                        loss = link_loss + label_loss
+                    else:
+                        loss = link_loss
+    
+                elif task_type == 'hu_rs' or task_type =='ou5_rs' or task_type =='ou10_rs' or task_type =='ou15_rs':
+                    criter = nn.CrossEntropyLoss()
+                    loss = criter(link_scores, graphs)
                 loss.backward()
                 for name, params in model.named_parameters():
                     if 'SSAModule.gnn' in name:
@@ -738,23 +740,23 @@ if __name__ == '__main__':
                                          collate_fn=eval_collate_fn_mol)
 
         train_dataloader_hu_ar = DataLoader(dataset=train_dataset_hu_ar, batch_size=args.hu_pool_size, shuffle=True,
-                                            collate_fn=train_collate_fn_hu)
+                                            collate_fn=train_collate_fn_mol)
         
         eval_dataloader_hu_ar = DataLoader(dataset=eval_dataset_hu_ar, batch_size=args.hu_pool_size, shuffle=False,
                                             collate_fn=eval_collate_fn_mol)
 
         train_dataloader_hu_si = DataLoader(dataset=train_dataset_hu_si, batch_size=args.hu_pool_size, shuffle=True,
-                                            collate_fn=train_collate_fn_hu)
+                                            collate_fn=train_collate_fn_mol)
         
         eval_dataloader_hu_si = DataLoader(dataset=eval_dataset_hu_si, batch_size=args.hu_pool_size, shuffle=False,
                                             collate_fn=eval_collate_fn_mol)
-        # train_dataloader_hu_rs =   DataLoader(dataset=train_hu_rs_dataset, batch_size=args.hu_pool_size,
-        #                                        shuffle=True,
-        #                                        collate_fn=train_collate_fn_hu)
-        
-        # eval_dataloader_hu_rs =   DataLoader(dataset=eval_hu_rs_dataset, batch_size=args.hu_pool_size,
-        #                                        shuffle=False,
-        #                                        collate_fn=eval_collate_fn_mol)
+        train_dataloader_hu_rs =   DataLoader(dataset=train_dataset_hu_rs, batch_size=args.hu_pool_size,
+                                               shuffle=True,
+                                               collate_fn=train_collate_fn_mol)
+      
+        eval_dataloader_hu_rs =   DataLoader(dataset=eval_dataset_hu_rs, batch_size=args.hu_pool_size,
+                                               shuffle=False,
+                                               collate_fn=eval_collate_fn_mol)
         # train_dataloader_hu = ''  
 
         # train_dataloader_ou5 = DataLoader(dataset=train_dataset_ou5, batch_size=args.ou5_pool_size,
@@ -771,18 +773,25 @@ if __name__ == '__main__':
         train_dataloader_ou10 = ''
         train_dataloader_ou15 = ''
         #TST
+        
         args.TST_Learning_Mode = False
-        print('args.with_spk_embedding')
-        print(args.with_spk_embedding)
         pretrained_model = BertWithSpeakerID(args) # bert_model_name, speaker_id_dim, num_speakers 
         model = PolicyNetwork(args=args, pretrained_model=pretrained_model)
         model = model.to(args.device)
-        # state_dict = torch.load(args.ST_model_path+'.pt')
-        # model.load_state_dict(state_dict, strict=False)
-        # print('generate task mask')
-        # parsing_mask = generate_TST_mask_all(args, model, 'parsing', train_dataloader_mol)
-        # hu_mask = generate_TST_mask(args, model, 'hu_ar', train_dataloader_hu)
-        
+        if args.TST_Learning_Mode:
+
+            state_dict = torch.load(args.ST_model_path+'.pt')
+            model.load_state_dict(state_dict, strict=False)
+            print('generate task mask')
+            parsing_mask = generate_TST_mask(args, model, 'parsing', train_dataloader_mol)
+            hu_ar_mask = generate_TST_mask(args, model, 'hu_ar', train_dataloader_hu_ar)
+            hu_si_mask = generate_TST_mask(args, model, 'hu_si', train_dataloader_hu_si)
+            hu_rs_mask = generate_TST_mask(args, model, 'hu_rs', train_dataloader_hu_rs,withSpkEmbedding=True)
+
+            model.set_gradient_mask(parsing_mask, 'parsing')
+            model.set_gradient_mask(hu_ar_mask, 'hu_ar')
+            model.set_gradient_mask(hu_si_mask, 'hu_si')
+            model.set_gradient_mask(hu_rs_mask, 'hu_rs')
         # ou5_mask = generate_TST_mask_all(args, model, 'ou5_ar', train_dataloader_ou5)
         # ou10_mask = generate_TST_mask(args, model, 'ou10_ar', train_dataloader_ou10)
         # ou15_mask = generate_TST_mask(args, model, 'ou15_ar', train_dataloader_ou15)
@@ -794,87 +803,85 @@ if __name__ == '__main__':
         # model.set_gradient_mask(ou15_mask, 'ou15_ar')
         
 
-        max_reward = 0
+        max_reward = 1000
         max_epoch = -1
         for epoch in range(args.TST_epoches):
             # print('{} epoch TST finetuning..'.format(epoch + 1))
             model.train() 
-            MultiTaskLearning(model, '',
-                            '',
-                            '',
-                            '',
-                            train_dataloader_hu_si,
-                            '', 
-                            '',
-                            '', 
-                            '',
-                             '', 
-                            '',
-                            '', 
-                            '',)
-            # hu_rs_eval_loss, hu_epoch_f1 = model.compute_RS_f1_and_loss_reward(tasktype='hu_rs',
-            #                                                           eval_dataloader=eval_dataloader_hu_rs)
+            MultiTaskLearning(model, 
+                              train_mol_dataloader=train_dataloader_mol,
+                              train_hu_ar_dataloader = train_dataloader_hu_ar,
+                              train_hu_si_dataloader = train_dataloader_hu_si,
+                              train_hu_rs_dataloader = train_dataloader_hu_rs 
+                              )
+            
 
-            # print('eval hu rs eval loss {}'.format(hu_rs_eval_loss))
-            # if hu_rs_eval_loss < max_reward:
-            #     torch.save(model.state_dict(), args.TST_model_path + '.pt')
-            #     max_reward = hu_rs_eval_loss
-
-            # mol_linkandrel_loss, _ = model.compute_f1_and_loss_reward(tasktype='parsing',
-            #                                                           eval_dataloader=eval_dataloader_mol)
+            mol_linkandrel_loss, _ = model.compute_f1_and_loss_reward(tasktype='parsing',
+                                                                      eval_dataloader=eval_dataloader_mol)
            
-            # print('eval mol link loss {}'.format(mol_linkandrel_loss))
-            # total_eval_loss = mol_linkandrel_loss
-            # print('total eval loss {}'.format(total_eval_loss))
-            # if total_eval_loss < max_reward:
-            #     torch.save(model.state_dict(), args.TST_model_path + '.pt')
-            #     max_reward = total_eval_loss
-            #     max_epoch = epoch
+            Pat1_ar, SessAc_ar, ar_link_loss =  model.compute_Pat1_and_loss_reward(tasktype='hu_ar',
+                                                                      eval_dataloader=eval_dataloader_hu_ar,
+                                                                      source_file=args.eval_hu_ar_file)
 
-            Pat1, _ = model.compute_SI_Pat1_and_loss_reward(tasktype='hu_si',
-                                                                      eval_dataloader=eval_dataloader_hu_si)
-            if Pat1 > max_reward:
-                torch.save(model.state_dict(), args.TST_model_path + '.pt')
-                max_reward = Pat1
+            hu_rs_eval_loss, hu_epoch_f1 = model.compute_RS_f1_and_loss_reward(tasktype='hu_rs',
+                                                                      eval_dataloader=eval_dataloader_hu_rs)
+            
+            
+
+            Pat1_si, hu_si_loss = model.compute_SI_Pat1_and_loss_reward(tasktype='hu_si',
+                                                                      eval_dataloader=eval_dataloader_hu_si,
+                                                                      source_file=args.eval_hu_si_file)
+            
+           
+            
+            total_loss = mol_linkandrel_loss + mol_linkandrel_loss + hu_rs_eval_loss + hu_si_loss
+
+
+            if total_loss < max_reward:
+                torch.save(model.state_dict(), args.ST_model_path + '.pt')
+                max_reward = total_loss
                 max_epoch = epoch
+            # print('eval hu rs eval loss {}'.format(hu_rs_eval_loss))
+         
 
     else:
         test_dataloader_mol = DataLoader(dataset=test_dataset_mol, batch_size=args.eval_mol_pool_size,
                                          shuffle=False,
                                          collate_fn=eval_collate_fn_mol)
-        # test_dataloader_ou_len5 = DataLoader(dataset=test_dataset_ou_len5, batch_size=args.eval_len5_pool_size,
-        #                                  shuffle=False,
-        #                                  collate_fn=eval_collate_fn_mol)
 
-        # test_dataloader_hu_rs =   DataLoader(dataset=test_dataset_hu_rs, batch_size=args.hu_pool_size,
-        #                                        shuffle=False,
-        #                                        collate_fn=eval_collate_fn_mol)
+        test_dataloader_hu_rs =   DataLoader(dataset=test_dataset_hu_rs, batch_size=args.hu_pool_size,
+                                               shuffle=False,
+                                               collate_fn=eval_collate_fn_mol)
 
-
-                
         test_dataloader_hu_ar = DataLoader(dataset=test_dataset_hu_ar, batch_size=args.hu_pool_size, shuffle=False,
                                             collate_fn=eval_collate_fn_mol)
         test_dataloader_hu_si = DataLoader(dataset=test_dataset_hu_si, batch_size=args.hu_pool_size, shuffle=False,
                                             collate_fn=eval_collate_fn_mol)
         
-        # eval_dataset_hu_si = DialogueDataset(args=args, filename= args.eval_hu_si_file, tokenizer=tokenizer, mode='eval',text_max_sep_len=args.utt_max_len,
-        #                                    total_seq_len = args.max_hu_text_len,mask_last_speaker=True)
-        # eval_dataset_hu_si.get_relations(relations, type2ids, id2types)
-        # eval_dataset_hu_si.get_discourse_graph()
-        # eval_dataloader_hu_si = DataLoader(dataset=eval_dataset_hu_si, batch_size=args.hu_pool_size, shuffle=False,
-        #                                     collate_fn=eval_collate_fn_mol)
        
         pretrained_model = BertWithSpeakerID(args) # bert_model_name, speaker_id_dim, num_speakers 
         model = PolicyNetwork(args=args, pretrained_model=pretrained_model)
         model = model.to(args.device)
-        state_dict = torch.load(args.TST_model_path+'.pt')
+        if args.TST_Learning_Mode:
+            print('loading path : {}'.format(args.TST_model_path+'.pt'))
+            state_dict = torch.load(args.TST_model_path+'.pt')
+        else:
+            print('loading path : {}'.format(args.ST_model_path+'.pt'))
+            state_dict = torch.load(args.ST_model_path+'.pt')
         model.load_state_dict(state_dict,strict=False)
         model.eval()
-        # total_loss, total_f1 = model.compute_f1_and_loss_reward(tasktype='hu_si',
-        #                                                   eval_dataloader=test_dataloader_hu_si)
-        # print('ou_address to')
-        Pat1, _ = model.compute_SI_Pat1_and_loss_reward(tasktype='hu_si',
-                                                          eval_dataloader=test_dataloader_hu_si)
+        print('evaluating Mol Parsing:')
+        total_loss, total_f1 = model.compute_f1_and_loss_reward(tasktype='parsing',
+                                                          eval_dataloader=test_dataloader_mol)
+        print('evaluating hu ar:')
+        Pat1_ar, SessAc_ar, ar_link_loss =  model.compute_Pat1_and_loss_reward(tasktype='hu_ar',
+                                                                      eval_dataloader=test_dataloader_hu_ar,
+                                                                      source_file=args.test_hu_ar_file)
 
-        # hu_rs_eval_loss, hu_epoch_f1 = model.compute_RS_f1_and_loss_reward(tasktype='hu_rs',
-        #                                                     eval_dataloader=test_dataloader_hu_rs)
+        print('evaluating hu si :')
+        Pat1, _ = model.compute_SI_Pat1_and_loss_reward(tasktype='hu_si',
+                                                          eval_dataloader=test_dataloader_hu_si,
+                                                           source_file=args.test_hu_si_file)
+        print('evaluating hu rs:')
+        hu_rs_eval_loss, hu_epoch_f1 = model.compute_RS_f1_and_loss_reward(tasktype='hu_rs',
+                                                            eval_dataloader=test_dataloader_hu_rs)
