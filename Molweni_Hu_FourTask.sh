@@ -27,7 +27,10 @@ eval_hu_si_file="${data_dir}/Hu_Dataset/Hu_SI_Dir/valid_si_parsingType.json"
 eval_ou5_si_file="${data_dir}/Ou_Dataset/Ou5_SI_Dir/valid_si_parsingType.json"
 eval_ou10_si_file="${data_dir}/Ou_Dataset/Ou10_SI_Dir/valid_si_parsingType.json"
 eval_ou15_si_file="${data_dir}/Ou_Dataset/Ou15_SI_Dir/valid_si_parsingType.json"
-
+mol_parsing_mask_path='./MaskPath/mol_parsing_mask_path.pt'
+hu_ar_mask_path='./MaskPath/hu_ar_mask_path.pt'
+hu_si_mask_path='./MaskPath/hu_si_mask_path.pt'
+hu_rs_mask_path='./MaskPath/hu_rs_mask_path.pt'
 dataset_dir="./Mol_Hu_FourTask"
 model_dir="./model_dir_Mol_Hu_FourTask"
 
@@ -44,14 +47,20 @@ CUDA_VISIBLE_DEVICES=${GPU}  nohup python -u main.py \
                                     --eval_hu_si_file=$eval_hu_si_file \
                                     --train_hu_rs_file=$train_hu_rs_file \
                                     --eval_hu_rs_file=$eval_hu_rs_file \
-                                    --hu_pool_size 128 \
+                                    --hu_rs_mask_path=$hu_rs_mask_path \
+                                    --hu_si_mask_path=$hu_si_mask_path \
+                                    --hu_ar_mask_path=$hu_ar_mask_path \
+                                    --mol_parsing_mask_path=$mol_parsing_mask_path \
+                                    --hu_pool_size 256 \
                                     --hu_batch_size 100 \
                                     --utt_max_len 24 \
                                     --max_mol_text_len 380 \
                                     --max_hu_text_len 380 \
                                     --dataset_dir=$dataset_dir  \
                                     --do_train \
+                                    --ST_epoches 5 \
                                     --TST_epoches 5 \
-                                    --ST_model_path "${model_dir}/Mol_hu_FourTask_ST" \
-                                    --TST_model_path "${model_dir}/Mol_hu_FourTask_TST" \
-                                    --seed 65534 > ./logs/Mol_hu_FourTask_ST.log 2>&1 &
+                                    --TrainingParsingTimes 3 \
+                                    --ST_model_path "${model_dir}/Mol_hu_FourTask_ST_TrainingParsingTimes3" \
+                                    --TST_model_path "${model_dir}/MolHu_Reduce_FourTask_TST_TrainingParsingTimes3" \
+                                    --seed 65534 > ./logs/Mol_hu_FourTask_ST_TrainingParsingTimes3.log 2>&1 &

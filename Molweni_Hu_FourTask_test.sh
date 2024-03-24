@@ -29,8 +29,8 @@ CUDA_VISIBLE_DEVICES=${GPU}  python main.py \
                                     --max_hu_text_len 380 \
                                     --dataset_dir=$dataset_dir  \
                                     --num_layers 1 \
-                                    --ST_model_path "${model_dir}/Mol_hu_FourTask_ST" \
-                                    --TST_model_path "${model_dir}/Mol_hu_FourTask_ST" \
+                                    --ST_model_path "${model_dir}/Mol_hu_FourTask_ST_TrainingParsingTimes3" \
+                                    --TST_model_path "${model_dir}/MolHu_Reduce_FourTask_TST_TrainingParsingTimes3" \
                                     --max_edu_dist 16 
                                  
                                   

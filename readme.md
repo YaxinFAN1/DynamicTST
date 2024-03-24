@@ -37,3 +37,23 @@
  80.47 57.00
 
  # 加不加GRU几乎没啥影响
+
+
+ # addressee recognition 
+
+ hu 
+
+ bert + SSA withoutGRU dev 上的效果最好是 Pat1 is 0.9114266891149989, SessAcc is 0.66 因为只跑了五轮，可能结果还能继续更好，大概Pat1 能跑到94左右
+ SAbert +SSA 几乎优化很慢
+
+
+ # Speaker identification
+ 看起来一对多的优化性能并不是很好，测试集合上大概只有40 P@1
+BERT+SSA 表现，无论一对多还是多对一表现好像都很差
+(性能差的原因是除了bug，是用的hu_AR的训练集训练，然后测试的hu_si)
+20240316晚上八点修复了bug。last speaker 使用None进行mask。
+ ## SABERT only的表现，一对一
+
+ # 20240319
+
+ 只找ST的子网络，比找BERT+ST的子网络效果要好

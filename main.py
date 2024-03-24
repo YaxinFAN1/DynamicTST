@@ -64,9 +64,14 @@ if __name__ == '__main__':
     parser.add_argument('--eval_ou_rs_len5_file', type=str)
     parser.add_argument('--eval_ou_rs_len10_file', type=str)
     parser.add_argument('--eval_ou_rs_len15_file', type=str)
+    parser.add_argument('--hu_ar_mask_path', type=str)
+    parser.add_argument('--hu_si_mask_path', type=str)
+    parser.add_argument('--hu_rs_mask_path', type=str)
+    parser.add_argument('--mol_parsing_mask_path', type=str)
     parser.add_argument('--dataset_dir', type=str, default='dataset')
     parser.add_argument('--model_name_or_path', type=str, default='/home/yxfan/pretrained_model/bert-base-uncased/')
     parser.add_argument('--remake_dataset', action="store_true")
+    parser.add_argument('--remake_mask', action="store_true")
     parser.add_argument('--remake_tokenizer', action="store_true")
     parser.add_argument('--max_edu_dist', type=int, default=20)
     parser.add_argument('--path_hidden_size', type=int, default=384)
@@ -82,6 +87,7 @@ if __name__ == '__main__':
     parser.add_argument('--ST_epoches', type=int, default=5)
     parser.add_argument('--TST_epoches', type=int, default=3)
     parser.add_argument('--RL_epoches', type=int, default=3)
+    parser.add_argument('--TrainingParsingTimes', type=int, default=2)
     parser.add_argument('--mol_pool_size', type=int, default=100)
     parser.add_argument('--hu_pool_size', type=int, default=100)
     parser.add_argument('--ou5_pool_size', type=int, default=100)
@@ -119,7 +125,7 @@ if __name__ == '__main__':
     parser.add_argument('--max_ou5_text_len', type=int, default= 130)
     parser.add_argument('--max_ou10_text_len', type=int, default= 260)
     parser.add_argument('--max_ou15_text_len', type=int, default= 380)
-    parser.add_argument('--TST_Learning_Mode', type=bool, default=False)
+    parser.add_argument('--TST_Learning_Mode',  action="store_true")
     parser.add_argument('--alpha', type=float, default=0.7)
     parser.add_argument('--state_dim', type=int, default= 768)
     parser.add_argument('--hdim', type=int, default= 384)
@@ -568,23 +574,7 @@ if __name__ == '__main__':
         step = 0
         total_mol_parsing_link_loss = total_hu_ar_loss = total_hu_si_loss = total_hu_rs_loss  = 0
         total_mol_parsing_Rel_loss  = 0
-        # total_hu_rs_loss = total_ou5_rs_loss = total_ou10_rs_loss = total_ou15_rs_loss = 0
-        print('training parsing-------------')
-        # train mol
-        for mol_data_batch in tqdm(train_mol_dataloader):
-            temp_link_mol_loss, temp_rel_mol_loss = \
-                mtl_model.train_minibatch('parsing', mol_data_batch)
-            total_mol_parsing_link_loss += temp_link_mol_loss
-            total_mol_parsing_Rel_loss += temp_rel_mol_loss
-            step += 1
-            if step % args.report_step == 0:
-                print(
-                    '\t{} mol link loss {:.4f}, rel loss {:.4f} '.format(step,
-                                  total_mol_parsing_link_loss / args.report_step,
-                                  total_mol_parsing_Rel_loss / args.report_step))
-                total_mol_parsing_link_loss = total_mol_parsing_Rel_loss = 0
-            if args.debug:
-                break 
+      
         print('training hu ar-------------')
         # #train hu ar
         for hu_data_batch in tqdm(train_hu_ar_dataloader):
@@ -622,62 +612,144 @@ if __name__ == '__main__':
             if args.debug:
                 break 
         
-
+        print('training parsing-------------')
+        # train mol
+        for i in range(args.TrainingParsingTimes):
+            for mol_data_batch in tqdm(train_mol_dataloader):
+                temp_link_mol_loss, temp_rel_mol_loss = \
+                    mtl_model.train_minibatch('parsing', mol_data_batch)
+                total_mol_parsing_link_loss += temp_link_mol_loss
+                total_mol_parsing_Rel_loss += temp_rel_mol_loss
+                step += 1
+                if step % 1 == 0:
+                    print(
+                        '\t{} mol link loss {:.4f}, rel loss {:.4f} '.format(step,
+                                    total_mol_parsing_link_loss / args.report_step,
+                                    total_mol_parsing_Rel_loss / args.report_step))
+                    total_mol_parsing_link_loss = total_mol_parsing_Rel_loss = 0
+                if args.debug:
+                    break 
             
-    def generate_TST_mask(args, model, task_type, train_dataloader, withSpkEmbedding=False):
-        gradient_mask = dict()
-        model.train()
-        for name, params in model.named_parameters():
-            if 'SSAModule.gnn' in name:
-                gradient_mask[params] = params.new_zeros(params.size())
-        N = len(train_dataloader)
-        for batch in tqdm(train_dataloader):
-            for mini_batch in batch:
-                texts, input_mask, segment_ids, speaker_ids, sep_index, pairs, graphs, speakers, turns, edu_nums = mini_batch
-                texts, input_mask, segment_ids, speaker_ids, graphs, speakers, turns, edu_nums = \
-                    texts.cuda(), input_mask.cuda(), segment_ids.cuda(), speaker_ids.cuda(), graphs.cuda(), speakers.cuda(), turns.cuda(), edu_nums.cuda()
-                mask = get_mask(node_num=edu_nums + 1, max_edu_dist=args.max_edu_dist).cuda()
-                link_scores, label_scores = model.critic.task_output(task_type, texts, input_mask, segment_ids, speaker_ids,
-                                                                    sep_index,
-                                                                    edu_nums, speakers, turns,
-                                                                    withSpkembedding=withSpkEmbedding)
-                
-                if task_type == 'hu_ar' or task_type == 'ou5_ar' or task_type == 'ou10_ar' or task_type == 'ou15_ar' or \
-                    task_type == 'hu_si' or task_type == 'ou5_si' or task_type == 'ou10_si' or task_type == 'ou15_si' or task_type == 'parsing':
-                    link_loss, label_loss = compute_loss(link_scores.clone(), label_scores.clone(), graphs, mask)
-                    link_loss = link_loss.mean()
-                    label_loss = label_loss.mean()
-                    if task_type=='parsing':
-                        loss = link_loss + label_loss
-                    else:
-                        loss = link_loss
-    
-                elif task_type == 'hu_rs' or task_type =='ou5_rs' or task_type =='ou10_rs' or task_type =='ou15_rs':
-                    criter = nn.CrossEntropyLoss()
-                    loss = criter(link_scores, graphs)
-                loss.backward()
-                for name, params in model.named_parameters():
-                    if 'SSAModule.gnn' in name:
-                        torch.nn.utils.clip_grad_norm_(params, 1.0)
-                        gradient_mask[params] += (params.grad ** 2) / N
-                model.critic.task_model.zero_grad()
+    def generate_TST_mask(args, model, task_type, train_dataloader, mask_save_path, withSpkEmbedding=False):
+        if os.path.exists(mask_save_path) and not args.remake_mask:
+            print('loading mask: {}'.format(mask_save_path))
+            gradient_mask = torch.load(mask_save_path)
+        else:
+            
+            gradient_mask = dict()
+            model.train()
+            for name, params in model.named_parameters():
+                if 'SSAModule.gnn' in name :
+                    gradient_mask[params] = params.new_zeros(params.size())
+            N = len(train_dataloader)
+            for batch in tqdm(train_dataloader):
+                for mini_batch in batch:
+                    texts, input_mask, segment_ids, speaker_ids, sep_index, pairs, graphs, speakers, turns, edu_nums = mini_batch
+                    texts, input_mask, segment_ids, speaker_ids, graphs, speakers, turns, edu_nums = \
+                        texts.cuda(), input_mask.cuda(), segment_ids.cuda(), speaker_ids.cuda(), graphs.cuda(), speakers.cuda(), turns.cuda(), edu_nums.cuda()
+                    mask = get_mask(node_num=edu_nums + 1, max_edu_dist=args.max_edu_dist).cuda()
+                    link_scores, label_scores = model.critic.task_output(task_type, texts, input_mask, segment_ids, speaker_ids,
+                                                                        sep_index,
+                                                                        edu_nums, speakers, turns,
+                                                                        withSpkembedding=withSpkEmbedding)
+                    
+                    if task_type == 'hu_ar' or task_type == 'ou5_ar' or task_type == 'ou10_ar' or task_type == 'ou15_ar' or \
+                        task_type == 'hu_si' or task_type == 'ou5_si' or task_type == 'ou10_si' or task_type == 'ou15_si' or task_type == 'parsing':
+                        link_loss, label_loss = compute_loss(link_scores.clone(), label_scores.clone(), graphs, mask)
+                        link_loss = link_loss.mean()
+                        label_loss = label_loss.mean()
+                        if task_type=='parsing':
+                            loss = link_loss + label_loss
+                        else:
+                            loss = link_loss
+        
+                    elif task_type == 'hu_rs' or task_type =='ou5_rs' or task_type =='ou10_rs' or task_type =='ou15_rs':
+                        criter = nn.CrossEntropyLoss()
+                        loss = criter(link_scores, graphs)
+                    loss.backward()
+                    for name, params in model.named_parameters():
+                        if 'SSAModule.gnn' in name :
+                            torch.nn.utils.clip_grad_norm_(params, 1.0)
+                            gradient_mask[params] += (params.grad ** 2) / N
+                    model.critic.task_model.zero_grad()
+                    if args.debug:
+                        break
                 if args.debug:
                     break
-            if args.debug:
-                break
-        r = None
-        for k, v in gradient_mask.items():
-            v = v.view(-1).cpu().numpy()
-            if r is None:
-                r = v
-            else:
-                r = np.append(r, v)
-        polar = np.percentile(r, args.alpha * 100)
-        for k in gradient_mask:
-            gradient_mask[k] = gradient_mask[k] >= polar
-        
+            r = None
+            for k, v in gradient_mask.items():
+                v = v.view(-1).cpu().numpy()
+                if r is None:
+                    r = v
+                else:
+                    r = np.append(r, v)
+            polar = np.percentile(r, args.alpha * 100)
+            for k in gradient_mask:
+                gradient_mask[k] = gradient_mask[k] >= polar
+            torch.save(gradient_mask, mask_save_path)
+            print('mask saved path: {}'.format(mask_save_path))
         return gradient_mask
-    
+
+    def generate_TSTAndBERT_mask(args, model, task_type, train_dataloader, mask_save_path, withSpkEmbedding=False):
+        if os.path.exists(mask_save_path) and not args.remake_mask:
+            print('loading mask: {}'.format(mask_save_path))
+            gradient_mask = torch.load(mask_save_path)
+        else:
+            
+            gradient_mask = dict()
+            model.train()
+            for name, params in model.named_parameters():
+                if 'SSAModule.gnn' in name or 'pretrained_model.embeddings.' in name:
+                    gradient_mask[params] = params.new_zeros(params.size())
+            N = len(train_dataloader)
+            for batch in tqdm(train_dataloader):
+                for mini_batch in batch:
+                    texts, input_mask, segment_ids, speaker_ids, sep_index, pairs, graphs, speakers, turns, edu_nums = mini_batch
+                    texts, input_mask, segment_ids, speaker_ids, graphs, speakers, turns, edu_nums = \
+                        texts.cuda(), input_mask.cuda(), segment_ids.cuda(), speaker_ids.cuda(), graphs.cuda(), speakers.cuda(), turns.cuda(), edu_nums.cuda()
+                    mask = get_mask(node_num=edu_nums + 1, max_edu_dist=args.max_edu_dist).cuda()
+                    link_scores, label_scores = model.critic.task_output(task_type, texts, input_mask, segment_ids, speaker_ids,
+                                                                        sep_index,
+                                                                        edu_nums, speakers, turns,
+                                                                        withSpkembedding=withSpkEmbedding)
+                    
+                    if task_type == 'hu_ar' or task_type == 'ou5_ar' or task_type == 'ou10_ar' or task_type == 'ou15_ar' or \
+                        task_type == 'hu_si' or task_type == 'ou5_si' or task_type == 'ou10_si' or task_type == 'ou15_si' or task_type == 'parsing':
+                        link_loss, label_loss = compute_loss(link_scores.clone(), label_scores.clone(), graphs, mask)
+                        link_loss = link_loss.mean()
+                        label_loss = label_loss.mean()
+                        if task_type=='parsing':
+                            loss = link_loss + label_loss
+                        else:
+                            loss = link_loss
+        
+                    elif task_type == 'hu_rs' or task_type =='ou5_rs' or task_type =='ou10_rs' or task_type =='ou15_rs':
+                        criter = nn.CrossEntropyLoss()
+                        loss = criter(link_scores, graphs)
+                    loss.backward()
+                    for name, params in model.named_parameters():
+                        if 'SSAModule.gnn' in name or 'pretrained_model.embeddings.' in name:
+                            torch.nn.utils.clip_grad_norm_(params, 1.0)
+                            gradient_mask[params] += (params.grad ** 2) / N
+                    model.critic.task_model.zero_grad()
+                    if args.debug:
+                        break
+                if args.debug:
+                    break
+            r = None
+            for k, v in gradient_mask.items():
+                v = v.view(-1).cpu().numpy()
+                if r is None:
+                    r = v
+                else:
+                    r = np.append(r, v)
+            polar = np.percentile(r, args.alpha * 100)
+            for k in gradient_mask:
+                gradient_mask[k] = gradient_mask[k] >= polar
+            torch.save(gradient_mask, mask_save_path)
+            print('mask saved path: {}'.format(mask_save_path))
+        return gradient_mask
+
     def generate_TST_mask_all(args, model, task_type, train_dataloader):
         gradient_mask = dict()
         model.train()
@@ -774,19 +846,17 @@ if __name__ == '__main__':
         train_dataloader_ou15 = ''
         #TST
         
-        args.TST_Learning_Mode = False
         pretrained_model = BertWithSpeakerID(args) # bert_model_name, speaker_id_dim, num_speakers 
         model = PolicyNetwork(args=args, pretrained_model=pretrained_model)
         model = model.to(args.device)
         if args.TST_Learning_Mode:
-
+            print('begin generate task mask')
             state_dict = torch.load(args.ST_model_path+'.pt')
             model.load_state_dict(state_dict, strict=False)
-            print('generate task mask')
-            parsing_mask = generate_TST_mask(args, model, 'parsing', train_dataloader_mol)
-            hu_ar_mask = generate_TST_mask(args, model, 'hu_ar', train_dataloader_hu_ar)
-            hu_si_mask = generate_TST_mask(args, model, 'hu_si', train_dataloader_hu_si)
-            hu_rs_mask = generate_TST_mask(args, model, 'hu_rs', train_dataloader_hu_rs,withSpkEmbedding=True)
+            parsing_mask = generate_TST_mask(args, model, 'parsing', train_dataloader_mol, mask_save_path=args.mol_parsing_mask_path)
+            hu_ar_mask = generate_TST_mask(args, model, 'hu_ar', train_dataloader_hu_ar, mask_save_path=args.hu_ar_mask_path)
+            hu_si_mask = generate_TST_mask(args, model, 'hu_si', train_dataloader_hu_si, mask_save_path=args.hu_si_mask_path)
+            hu_rs_mask = generate_TST_mask(args, model, 'hu_rs', train_dataloader_hu_rs, mask_save_path=args.hu_rs_mask_path, withSpkEmbedding=True)
 
             model.set_gradient_mask(parsing_mask, 'parsing')
             model.set_gradient_mask(hu_ar_mask, 'hu_ar')
@@ -801,15 +871,23 @@ if __name__ == '__main__':
         # model.set_gradient_mask(ou5_mask, 'ou5_ar')
         # model.set_gradient_mask(ou10_mask, 'ou10_ar')
         # model.set_gradient_mask(ou15_mask, 'ou15_ar')
-        
+        if args.TST_Learning_Mode:
+            print('begin training TST')
+        else:
+            print('begin training ST')
 
         max_reward = 1000
         max_epoch = -1
-        for epoch in range(args.TST_epoches):
+        if args.TST_Learning_Mode:
+            total_epoch = args.TST_epoches
+        else:
+            total_epoch = args.ST_epoches
+        
+        for epoch in range(total_epoch):
             # print('{} epoch TST finetuning..'.format(epoch + 1))
             model.train() 
             MultiTaskLearning(model, 
-                              train_mol_dataloader=train_dataloader_mol,
+                              train_mol_dataloader = train_dataloader_mol,
                               train_hu_ar_dataloader = train_dataloader_hu_ar,
                               train_hu_si_dataloader = train_dataloader_hu_si,
                               train_hu_rs_dataloader = train_dataloader_hu_rs 
@@ -834,11 +912,15 @@ if __name__ == '__main__':
             
            
             
-            total_loss = mol_linkandrel_loss + mol_linkandrel_loss + hu_rs_eval_loss + hu_si_loss
+            total_loss = mol_linkandrel_loss + mol_linkandrel_loss + hu_rs_eval_loss + hu_si_loss + ar_link_loss
+            # total_loss =hu_rs_eval_loss
 
 
             if total_loss < max_reward:
-                torch.save(model.state_dict(), args.ST_model_path + '.pt')
+                if args.TST_Learning_Mode:
+                    torch.save(model.state_dict(), args.TST_model_path + '.pt')
+                else:
+                    torch.save(model.state_dict(), args.ST_model_path + '.pt')
                 max_reward = total_loss
                 max_epoch = epoch
             # print('eval hu rs eval loss {}'.format(hu_rs_eval_loss))
