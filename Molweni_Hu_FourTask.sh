@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 data_dir='../TSTRL/Data'
+MaskDir='./FourTask_CatClsNodeMaskPath'
 train_mol_file="${data_dir}/Molweni/train_reduce_50.json"
 eval_mol_file="${data_dir}/Molweni/dev.json"
 test_mol_file="${data_dir}/Molweni/test.json"
@@ -27,10 +28,10 @@ eval_hu_si_file="${data_dir}/Hu_Dataset/Hu_SI_Dir/valid_si_parsingType.json"
 eval_ou5_si_file="${data_dir}/Ou_Dataset/Ou5_SI_Dir/valid_si_parsingType.json"
 eval_ou10_si_file="${data_dir}/Ou_Dataset/Ou10_SI_Dir/valid_si_parsingType.json"
 eval_ou15_si_file="${data_dir}/Ou_Dataset/Ou15_SI_Dir/valid_si_parsingType.json"
-mol_parsing_mask_path='./MaskPath/mol_parsing_mask_path.pt'
-hu_ar_mask_path='./MaskPath/hu_ar_mask_path.pt'
-hu_si_mask_path='./MaskPath/hu_si_mask_path.pt'
-hu_rs_mask_path='./MaskPath/hu_rs_mask_path.pt'
+mol_parsing_mask_path="${MaskDir}/mol_parsing_mask_path.pt"
+hu_ar_mask_path="${MaskDir}/hu_ar_mask_path.pt"
+hu_si_mask_path="${MaskDir}/hu_si_mask_path.pt"
+hu_rs_mask_path="${MaskDir}/hu_rs_mask_path.pt"
 dataset_dir="./Mol_Hu_FourTask"
 model_dir="./model_dir_Mol_Hu_FourTask"
 
@@ -58,9 +59,11 @@ CUDA_VISIBLE_DEVICES=${GPU}  nohup python -u main.py \
                                     --max_hu_text_len 380 \
                                     --dataset_dir=$dataset_dir  \
                                     --do_train \
-                                    --ST_epoches 5 \
+                                    --ST_epoches 15 \
                                     --TST_epoches 5 \
-                                    --TrainingParsingTimes 3 \
-                                    --ST_model_path "${model_dir}/Mol_hu_FourTask_ST_TrainingParsingTimes3" \
-                                    --TST_model_path "${model_dir}/MolHu_Reduce_FourTask_TST_TrainingParsingTimes3" \
-                                    --seed 65534 > ./logs/Mol_hu_FourTask_ST_TrainingParsingTimes3.log 2>&1 &
+                                    --TrainingParsingTimes 1 \
+                                    --ParsingSeperate \
+                                    --only_structurePath_CLS_RS \
+                                    --ST_model_path "${model_dir}/Mol_Hu_FourTask_ST_only_structurePath_CLS_RS_TrainingParsingTimes1ParsingSeperateEpoch5" \
+                                    --TST_model_path "${model_dir}/Mol_Hu_FourTask_TST_only_structurePath_CLS_RS_TrainingParsingTimes1ParsingSeperateEpoch5" \
+                                    --seed 65534 > ./logs/Mol_Hu_FourTask_ST_only_structurePath_CLS_RS_TrainingParsingTimes1ParsingSeperateEpoch5.log 2>&1 &

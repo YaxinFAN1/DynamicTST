@@ -57,3 +57,14 @@ BERT+SSA 表现，无论一对多还是多对一表现好像都很差
  # 20240319
 
  只找ST的子网络，比找BERT+ST的子网络效果要好
+
+
+ # mol hu ar, si, rs一起的话关系的性能比较差，
+ 仅仅mol能跑到42，但是一起的话关系性能只有30左右
+ 
+ 分析了一下，可能原因是response selection的 structure path，以及没有把关系分开预测
+ 如果仅仅用structure path cls效果也是一般
+ cat node以及structure path效果才会好
+
+
+ # 

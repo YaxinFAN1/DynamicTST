@@ -87,7 +87,7 @@ if __name__ == '__main__':
     parser.add_argument('--ST_epoches', type=int, default=5)
     parser.add_argument('--TST_epoches', type=int, default=3)
     parser.add_argument('--RL_epoches', type=int, default=3)
-    parser.add_argument('--TrainingParsingTimes', type=int, default=2)
+    parser.add_argument('--TrainingParsingTimes', type=int, default=1)
     parser.add_argument('--mol_pool_size', type=int, default=100)
     parser.add_argument('--hu_pool_size', type=int, default=100)
     parser.add_argument('--ou5_pool_size', type=int, default=100)
@@ -134,9 +134,12 @@ if __name__ == '__main__':
     parser.add_argument('--withSpkembedding', action="store_true")
     parser.add_argument('--only_SABERT', action="store_true")
     parser.add_argument('--only_BERT', action="store_true")
-    parser.add_argument('--cat_cls_structurePath', action="store_true")
+    parser.add_argument('--only_cls_RS', action="store_true")# for response selection
+    parser.add_argument('--cat_cls_structurePath_RS', action="store_true")# for response selection
+    parser.add_argument('--only_structurePath_CLS_RS', action="store_true")# for response selection
     parser.add_argument('--with_GRU', action="store_true")
     parser.add_argument('--source_file', type=str, default='')
+    parser.add_argument('--ParsingSeperate', action="store_true")# 预测link和rel的时候是否分开
     
     args = parser.parse_args()
     seed_everything(args.seed)
@@ -574,7 +577,20 @@ if __name__ == '__main__':
         step = 0
         total_mol_parsing_link_loss = total_hu_ar_loss = total_hu_si_loss = total_hu_rs_loss  = 0
         total_mol_parsing_Rel_loss  = 0
-      
+
+        print('training hu rs-------------')
+        # train hu RS
+        for hu_rs_data_batch in tqdm(train_hu_rs_dataloader):
+            hu_rs_link_loss, _ = \
+                mtl_model.train_minibatch('hu_rs', hu_rs_data_batch, withSpkembedding=True)
+            total_hu_rs_loss += hu_rs_link_loss
+            step += 1
+            if step % args.report_step == 0:
+                print('\t{} step hu rs loss: {:.4f} '.format(step, total_hu_rs_loss / args.report_step))
+                total_hu_rs_loss = 0
+            if args.debug:
+                break 
+
         print('training hu ar-------------')
         # #train hu ar
         for hu_data_batch in tqdm(train_hu_ar_dataloader):
@@ -599,18 +615,7 @@ if __name__ == '__main__':
                 total_hu_si_loss = 0
             if args.debug:
                 break 
-        print('training hu rs-------------')
-        # train hu RS
-        for hu_rs_data_batch in tqdm(train_hu_rs_dataloader):
-            hu_rs_link_loss, _ = \
-                mtl_model.train_minibatch('hu_rs', hu_rs_data_batch, withSpkembedding=True)
-            total_hu_rs_loss += hu_rs_link_loss
-            step += 1
-            if step % args.report_step == 0:
-                print('\t{} step hu rs loss: {:.4f} '.format(step, total_hu_rs_loss / args.report_step))
-                total_hu_rs_loss = 0
-            if args.debug:
-                break 
+        
         
         print('training parsing-------------')
         # train mol
@@ -912,7 +917,7 @@ if __name__ == '__main__':
             
            
             
-            total_loss = mol_linkandrel_loss + mol_linkandrel_loss + hu_rs_eval_loss + hu_si_loss + ar_link_loss
+            total_loss = mol_linkandrel_loss  + hu_rs_eval_loss + hu_si_loss + ar_link_loss
             # total_loss =hu_rs_eval_loss
 
 

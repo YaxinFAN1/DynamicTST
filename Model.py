@@ -32,9 +32,9 @@ class ParsingTask(nn.Module):
                                            params.path_hidden_size,
                                            params.relation_type_num)
 
-    def forward(self, predicted_path, batch_size, node_num):
-        return self.link_classifier(predicted_path).reshape(batch_size, node_num, node_num), \
-               self.label_classifier(predicted_path)
+    def forward(self, predicted_path_link, predicted_path_rel, batch_size, node_num):
+        return self.link_classifier(predicted_path_link).reshape(batch_size, node_num, node_num), \
+               self.label_classifier(predicted_path_rel)
 
 class ARTask(nn.Module):
     def __init__(self, params):
@@ -150,7 +150,6 @@ class RSTask(nn.Module):
         return new_pad_sep_index_list
 
     def padding_sep_index_list(self, sep_index_list):
-
         max_edu = max([len(a) for a in sep_index_list])
         total_new_sep_index_list = []
         for index_list in sep_index_list:
@@ -185,13 +184,188 @@ class RSTask(nn.Module):
         # # 拼接cls_embedding,structure path
         return self.classifier(predicted_path[:,0,:]),  \
                ''
+
+class RSTaskOnlyStructureCLS(nn.Module):
+    def __init__(self, params):
+        super(RSTaskOnlyStructureCLS, self).__init__()
+        self.params = params
+        # if self.params.only_SABERT or self.params.only_BERT:# 仅仅使用cls_embedding 进行分类
+        #     self.classifier = nn.Linear(params.hidden_size, 2)
+        # else:
+            # if params.with_spk_embedding:
+                # if self.params.cat_cls_structurePath:
+        # self.classifier = nn.Linear(params.hidden_size + params.path_hidden_size, 2)
+                # else:
+        self.classifier = nn.Linear(params.path_hidden_size, 2)
+            # else:
+            #     self.classifier = nn.Linear(params.path_hidden_size, 2)
+        self.root = nn.Parameter(torch.zeros(params.hidden_size), requires_grad=False)
+        self.dropout = nn.Dropout(params.dropout)
+
+    def __fetch_sep_rep2(self, ten_output, seq_index):
+        batch, seq_len, hidden_size = ten_output.shape
+        shift_sep_index_list = self.get_shift_sep_index_list(seq_index, seq_len)
+        ten_output = torch.reshape(ten_output, (batch * seq_len, hidden_size))
+        sep_embedding = ten_output[shift_sep_index_list, :]
+        sep_embedding = torch.reshape(sep_embedding, (batch, len(seq_index[0]), hidden_size))
+        return sep_embedding
+
+    def get_shift_sep_index_list(self, pad_sep_index_list, seq_len):
+        new_pad_sep_index_list = []
+        for index in range(len(pad_sep_index_list)):
+            new_pad_sep_index_list.extend([item + index * seq_len for item in pad_sep_index_list[index]])
+        return new_pad_sep_index_list
+
+    def padding_sep_index_list(self, sep_index_list):
+
+        max_edu = max([len(a) for a in sep_index_list])
+        total_new_sep_index_list = []
+        for index_list in sep_index_list:
+            new_sep_index_list = []
+            gap = max_edu - len(index_list)
+            new_sep_index_list.extend(index_list)
+            for i in range(gap):
+                new_sep_index_list.append(index_list[-1])
+            total_new_sep_index_list.append(new_sep_index_list)
+        return max_edu, total_new_sep_index_list
+      
+    def forward(self, cls_embedding, predicted_path, sep_index_list):
+        
+        return self.classifier(predicted_path[:,0,0,:]),  \
+        ''
+       
+    # self.link_classifier(predicted_path).reshape(batch_size, node_num, node_num),
+
+class RSTaskOnlyCLS(nn.Module):
+    def __init__(self, params):
+        super(RSTaskOnlyCLS, self).__init__()
+        self.params = params
+        # if self.params.only_SABERT or self.params.only_BERT:# 仅仅使用cls_embedding 进行分类
+        #     self.classifier = nn.Linear(params.hidden_size, 2)
+        # else:
+            # if params.with_spk_embedding:
+                # if self.params.cat_cls_structurePath:
+        # self.classifier = nn.Linear(params.hidden_size + params.path_hidden_size, 2)
+                # else:
+        self.classifier = nn.Linear(params.hidden_size, 2)
+            # else:
+            #     self.classifier = nn.Linear(params.path_hidden_size, 2)
+        self.root = nn.Parameter(torch.zeros(params.hidden_size), requires_grad=False)
+        self.dropout = nn.Dropout(params.dropout)
+
+    def __fetch_sep_rep2(self, ten_output, seq_index):
+        batch, seq_len, hidden_size = ten_output.shape
+        shift_sep_index_list = self.get_shift_sep_index_list(seq_index, seq_len)
+        ten_output = torch.reshape(ten_output, (batch * seq_len, hidden_size))
+        sep_embedding = ten_output[shift_sep_index_list, :]
+        sep_embedding = torch.reshape(sep_embedding, (batch, len(seq_index[0]), hidden_size))
+        return sep_embedding
+
+    def get_shift_sep_index_list(self, pad_sep_index_list, seq_len):
+        new_pad_sep_index_list = []
+        for index in range(len(pad_sep_index_list)):
+            new_pad_sep_index_list.extend([item + index * seq_len for item in pad_sep_index_list[index]])
+        return new_pad_sep_index_list
+
+    def padding_sep_index_list(self, sep_index_list):
+
+        max_edu = max([len(a) for a in sep_index_list])
+        total_new_sep_index_list = []
+        for index_list in sep_index_list:
+            new_sep_index_list = []
+            gap = max_edu - len(index_list)
+            new_sep_index_list.extend(index_list)
+            for i in range(gap):
+                new_sep_index_list.append(index_list[-1])
+            total_new_sep_index_list.append(new_sep_index_list)
+        return max_edu, total_new_sep_index_list
+      
+    def forward(self, cls_embedding, predicted_path, sep_index_list):
+        # batch_size = cls_embedding[0].shape[0]
+        # edu_num, pad_sep_index_list = self.padding_sep_index_list(sep_index_list)
+        # node_num = edu_num + 1
+        # sentences = self.__fetch_sep_rep2(cls_embedding[0], pad_sep_index_list)
+        # nodes = torch.cat((self.root.expand(batch_size, 1, sentences.size(-1)),
+        #                    sentences.reshape(batch_size, edu_num, -1)), dim=1)
+        # nodes =  self.dropout(nodes)
+        # predicted_path = torch.mean(predicted_path, dim=2)
+        output  = cls_embedding[0]
+        # # else: # 仅仅使用structure path的平均池化，或者拼接cls_embedding 和structure path
+        # if self.params.withSpkembedding:
+        #     if self.params.cat_cls_structurePath:
+        #         output = torch.cat((nodes, predicted_path),dim=-1)
+        #     else:
+        #         output = predicted_path
+        # else:
+        #     output = predicted_path
+        # # 拼接cls_embedding,structure path
+        # return self.classifier(predicted_path[:,0,:]),  \
+            #    ''
+        return self.classifier(output[:,0,:]),  \
+               ''
+    # self.link_classifier(predicted_path).reshape(batch_size, node_num, node_num),
+
+class RSTaskCLSNode(nn.Module):
+    def __init__(self, params):
+        super(RSTaskCLSNode, self).__init__()
+        """
+        利用cls和node的最大池化
+        """
+        self.params = params
+        # if self.params.only_SABERT or self.params.only_BERT:# 仅仅使用cls_embedding 进行分类
+        #     self.classifier = nn.Linear(params.hidden_size, 2)
+        # else:
+            # if params.with_spk_embedding:
+                # if self.params.cat_cls_structurePath:
+        # self.classifier = nn.Linear(params.hidden_size + params.path_hidden_size, 2)
+                # else:
+        self.classifier = nn.Linear(params.hidden_size + params.path_hidden_size, 2)
+            # else:
+            #     self.classifier = nn.Linear(params.path_hidden_size, 2)
+        self.root = nn.Parameter(torch.zeros(params.hidden_size), requires_grad=False)
+        self.dropout = nn.Dropout(params.dropout)
+
+    def __fetch_sep_rep2(self, ten_output, seq_index):
+        batch, seq_len, hidden_size = ten_output.shape
+        shift_sep_index_list = self.get_shift_sep_index_list(seq_index, seq_len)
+        ten_output = torch.reshape(ten_output, (batch * seq_len, hidden_size))
+        sep_embedding = ten_output[shift_sep_index_list, :]
+        sep_embedding = torch.reshape(sep_embedding, (batch, len(seq_index[0]), hidden_size))
+        return sep_embedding
+
+    def get_shift_sep_index_list(self, pad_sep_index_list, seq_len):
+        new_pad_sep_index_list = []
+        for index in range(len(pad_sep_index_list)):
+            new_pad_sep_index_list.extend([item + index * seq_len for item in pad_sep_index_list[index]])
+        return new_pad_sep_index_list
+
+    def padding_sep_index_list(self, sep_index_list):
+
+        max_edu = max([len(a) for a in sep_index_list])
+        total_new_sep_index_list = []
+        for index_list in sep_index_list:
+            new_sep_index_list = []
+            gap = max_edu - len(index_list)
+            new_sep_index_list.extend(index_list)
+            for i in range(gap):
+                new_sep_index_list.append(index_list[-1])
+            total_new_sep_index_list.append(new_sep_index_list)
+        return max_edu, total_new_sep_index_list
+      
+    def forward(self, cls_embedding, predicted_path, sep_index_list):
+        output = torch.cat((cls_embedding[0][:,0,:], predicted_path[:,0,0,:]),dim=-1)
+        return self.classifier(output),  \
+        ''
     # self.link_classifier(predicted_path).reshape(batch_size, node_num, node_num),
 
 class TaskSpecificNetwork1(nn.Module):
     def __init__(self, params, pretained_model):
         super(TaskSpecificNetwork1, self).__init__()
+        self.params = params
         self.base_network = BaseNetwork(pretained_model)
         self.SSAModule  = SSAModule(params)
+        if self.params.ParsingSeperate:
+            self.SSAModuleForParsing  = SSAModule(params)
         self.ParsingNetwork = ParsingTask(params)
         self.HuARNetwork = ARTask(params)
         self.Ou5ARNetwork = ARTask(params)
@@ -201,63 +375,97 @@ class TaskSpecificNetwork1(nn.Module):
         self.Ou5SINetwork = ARTask(params)
         self.Ou10SINetwork = ARTask(params)
         self.Ou15SINetwork = ARTask(params)
-        self.HuRSNetwork = RSTask(params)
-        self.Ou5RSNetwork = RSTask(params)
-        self.Ou10RSNetwork = RSTask(params)
-        self.Ou15RSNetwork = RSTask(params)
+        if params.only_structurePath_CLS_RS:
+            if params.debug:
+                print('only_structurePath_CLS_RS')
+            self.HuRSNetwork = RSTaskOnlyStructureCLS(params)
+            self.Ou5RSNetwork = RSTaskOnlyStructureCLS(params)
+            self.Ou10RSNetwork = RSTaskOnlyStructureCLS(params)
+            self.Ou15RSNetwork = RSTaskOnlyStructureCLS(params)
+        if params.only_cls_RS:
+            if params.debug:
+                print('cls_RS')
+            self.HuRSNetwork = RSTaskOnlyCLS(params)
+            self.Ou5RSNetwork = RSTaskOnlyCLS(params)
+            self.Ou10RSNetwork = RSTaskOnlyCLS(params)
+            self.Ou15RSNetwork = RSTaskOnlyCLS(params)
+        elif params.cat_cls_structurePath_RS:
+            if params.debug:
+                print('cat_cls_structurePath_RS')
+            self.HuRSNetwork = RSTaskCLSNode(params)
+            self.Ou5RSNetwork = RSTaskCLSNode(params)
+            self.Ou10RSNetwork = RSTaskCLSNode(params)
+            self.Ou15RSNetwork = RSTaskCLSNode(params)
+        else:
+            self.HuRSNetwork = RSTask(params)
+            self.Ou5RSNetwork = RSTask(params)
+            self.Ou10RSNetwork = RSTask(params)
+            self.Ou15RSNetwork = RSTask(params)
 
     def forward(self, tasktype, texts,input_mask, segment_ids, speaker_ids, sep_index_list, edu_nums, speakers, turns, withSpkembedding):
         rep_x = self.base_network(texts, input_mask,  segment_ids,speaker_ids, withSpkembedding)
-        predict_path, structure_path, batch, node_num = self.SSAModule(rep_x, sep_index_list,
-                                    edu_nums, speakers, turns)
+        
         if tasktype == 'parsing':
-            link_scores, label_scores = \
-                self.ParsingNetwork(predict_path, batch, node_num)
+            predict_path_link, structure_path, batch, node_num = self.SSAModule(rep_x, sep_index_list,
+                                    edu_nums, speakers, turns)
+            if self.params.ParsingSeperate:
+                if self.params.debug:
+                    print('parsingSeperate')
+                predict_path_rel, structure_path, batch, node_num = self.SSAModuleForParsing(rep_x, sep_index_list,
+                                    edu_nums, speakers, turns)
+                link_scores, label_scores = \
+                self.ParsingNetwork(predict_path_link, predict_path_rel, batch, node_num)
+            else:
+                 link_scores, label_scores = \
+                self.ParsingNetwork(predict_path_link, predict_path_link, batch, node_num)
             output = (link_scores, label_scores)
-        elif tasktype == 'hu_ar':
-            link_scores, label_scores = \
-                self.HuARNetwork(predict_path, batch, node_num)
-            output = (link_scores, label_scores)
-        elif tasktype == 'ou5_ar':
-            link_scores, label_scores = \
-                self.Ou5ARNetwork(predict_path, batch, node_num)
-            output = (link_scores, label_scores)
-        elif tasktype == 'ou10_ar':
-            link_scores, label_scores = \
-                self.Ou10ARNetwork(predict_path, batch, node_num)
-            output = (link_scores, label_scores)
-        elif tasktype == 'ou15_ar':
-            link_scores, label_scores = \
-                self.Ou15ARNetwork(predict_path, batch, node_num)
-            output = (link_scores, label_scores)
-        elif tasktype == 'hu_rs':
-            scores,  label_scores = self.HuRSNetwork(rep_x, structure_path, sep_index_list)
-            output = (scores, label_scores)
-        elif tasktype == 'ou5_rs':
-            scores,   label_scores = self.Ou5RSNetwork(rep_x, structure_path, sep_index_list)
-            output = (scores, label_scores)
-        elif tasktype == 'ou10_rs':
-            scores,   label_scores = self.Ou10RSNetwork(rep_x, structure_path, sep_index_list)
-            output = (scores, label_scores)
-        elif tasktype == 'ou15_rs':
-            scores,  label_scores = self.Ou15RSNetwork(rep_x, structure_path, sep_index_list)
-            output = (scores, label_scores)
-        elif tasktype == 'hu_si':#  cls_embedding, predicted_path, sep_index_list
-            scores,  label_scores = self.HuSINetwork(predict_path, batch, node_num)
-            # scores,  label_scores = self.HuSINetwork(rep_x, predict_path, sep_index_list)
-            output = (scores, label_scores)
-        elif tasktype == 'ou5_si':
-            scores,   label_scores = self.Ou5SINetwork(predict_path, batch, node_num)
-            # scores,   label_scores = self.Ou5SINetwork(rep_x, predict_path, sep_index_list)
-            output = (scores, label_scores)
-        elif tasktype == 'ou10_si':
-            scores,   label_scores = self.Ou10SINetwork(predict_path, batch, node_num)
-            # scores,   label_scores = self.Ou10SINetwork(rep_x, predict_path, sep_index_list)
-            output = (scores, label_scores)
-        elif tasktype == 'ou15_si':
-            scores,  label_scores = self.Ou15SINetwork(predict_path, batch, node_num)
-            # scores,  label_scores = self.Ou15SINetwork(rep_x, predict_path, sep_index_list)
-            output = (scores, label_scores)
+        else:
+            predict_path, structure_path, batch, node_num = self.SSAModule(rep_x, sep_index_list,
+                                    edu_nums, speakers, turns)
+            if tasktype == 'hu_ar':
+                link_scores, label_scores = \
+                    self.HuARNetwork(predict_path, batch, node_num)
+                output = (link_scores, label_scores)
+            elif tasktype == 'ou5_ar':
+                link_scores, label_scores = \
+                    self.Ou5ARNetwork(predict_path, batch, node_num)
+                output = (link_scores, label_scores)
+            elif tasktype == 'ou10_ar':
+                link_scores, label_scores = \
+                    self.Ou10ARNetwork(predict_path, batch, node_num)
+                output = (link_scores, label_scores)
+            elif tasktype == 'ou15_ar':
+                link_scores, label_scores = \
+                    self.Ou15ARNetwork(predict_path, batch, node_num)
+                output = (link_scores, label_scores)
+            elif tasktype == 'hu_rs':
+                scores,  label_scores = self.HuRSNetwork(rep_x, structure_path, sep_index_list)
+                output = (scores, label_scores)
+            elif tasktype == 'ou5_rs':
+                scores,   label_scores = self.Ou5RSNetwork(rep_x, structure_path, sep_index_list)
+                output = (scores, label_scores)
+            elif tasktype == 'ou10_rs':
+                scores,   label_scores = self.Ou10RSNetwork(rep_x, structure_path, sep_index_list)
+                output = (scores, label_scores)
+            elif tasktype == 'ou15_rs':
+                scores,  label_scores = self.Ou15RSNetwork(rep_x, structure_path, sep_index_list)
+                output = (scores, label_scores)
+            elif tasktype == 'hu_si':#  cls_embedding, predicted_path, sep_index_list
+                scores,  label_scores = self.HuSINetwork(predict_path, batch, node_num)
+                # scores,  label_scores = self.HuSINetwork(rep_x, predict_path, sep_index_list)
+                output = (scores, label_scores)
+            elif tasktype == 'ou5_si':
+                scores,   label_scores = self.Ou5SINetwork(predict_path, batch, node_num)
+                # scores,   label_scores = self.Ou5SINetwork(rep_x, predict_path, sep_index_list)
+                output = (scores, label_scores)
+            elif tasktype == 'ou10_si':
+                scores,   label_scores = self.Ou10SINetwork(predict_path, batch, node_num)
+                # scores,   label_scores = self.Ou10SINetwork(rep_x, predict_path, sep_index_list)
+                output = (scores, label_scores)
+            elif tasktype == 'ou15_si':
+                scores,  label_scores = self.Ou15SINetwork(predict_path, batch, node_num)
+                # scores,  label_scores = self.Ou15SINetwork(rep_x, predict_path, sep_index_list)
+                output = (scores, label_scores)
         return output
 
 class ActorNetwork(nn.Module):
