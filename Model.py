@@ -8,6 +8,7 @@ from TST_Learning import AdamWTSTLearning
 from sklearn import metrics
 import torch.nn as nn
 import torch.nn.functional as F
+from module import DPSDense
 class BaseNetwork(nn.Module):
     def __init__(self, pretrained_model = None):
         super(BaseNetwork, self).__init__()
@@ -402,17 +403,32 @@ class TaskSpecificNetwork1(nn.Module):
             self.Ou10RSNetwork = RSTask(params)
             self.Ou15RSNetwork = RSTask(params)
 
-    def forward(self, tasktype, texts,input_mask, segment_ids, speaker_ids, sep_index_list, edu_nums, speakers, turns, withSpkembedding):
+    def resetSteps(self) -> None:
+        # 每次切换任务都要运行这个
+        if self.params.DynamicST: 
+            self.SSAModule.resetSteps()
+            if self.params.ParsingSeperate:
+                self.SSAModuleForParsing.resetSteps()
+
+    def forward(self, tasktype, texts,input_mask, segment_ids, speaker_ids, sep_index_list, edu_nums, speakers, turns, withSpkembedding, subnetwork_size_prob=None, max_steps=None, update_ratio=None):
         rep_x = self.base_network(texts, input_mask,  segment_ids,speaker_ids, withSpkembedding)
         
         if tasktype == 'parsing':
-            predict_path_link, structure_path, batch, node_num = self.SSAModule(rep_x, sep_index_list,
+            if self.params.DynamicST:
+                predict_path_link, structure_path, batch, node_num = self.SSAModule(rep_x, sep_index_list,
+                                        edu_nums, speakers, turns,  subnetwork_size_prob, max_steps, update_ratio)
+            else:
+                predict_path_link, structure_path, batch, node_num = self.SSAModule(rep_x, sep_index_list,
                                     edu_nums, speakers, turns)
             if self.params.ParsingSeperate:
                 if self.params.debug:
                     print('parsingSeperate')
-                predict_path_rel, structure_path, batch, node_num = self.SSAModuleForParsing(rep_x, sep_index_list,
-                                    edu_nums, speakers, turns)
+                if self.params.DynamicST:
+                    predict_path_rel, structure_path, batch, node_num = self.SSAModuleForParsing(rep_x, sep_index_list,
+                                        edu_nums, speakers, turns, subnetwork_size_prob, max_steps, update_ratio )
+                else:
+                    predict_path_rel, structure_path, batch, node_num = self.SSAModuleForParsing(rep_x, sep_index_list,
+                                        edu_nums, speakers, turns )
                 link_scores, label_scores = \
                 self.ParsingNetwork(predict_path_link, predict_path_rel, batch, node_num)
             else:
@@ -420,8 +436,12 @@ class TaskSpecificNetwork1(nn.Module):
                 self.ParsingNetwork(predict_path_link, predict_path_link, batch, node_num)
             output = (link_scores, label_scores)
         else:
-            predict_path, structure_path, batch, node_num = self.SSAModule(rep_x, sep_index_list,
-                                    edu_nums, speakers, turns)
+            if self.params.DynamicST:
+                predict_path, structure_path, batch, node_num = self.SSAModule(rep_x, sep_index_list,
+                                        edu_nums, speakers, turns,  subnetwork_size_prob, max_steps, update_ratio)
+            else:
+                predict_path, structure_path, batch, node_num = self.SSAModule(rep_x, sep_index_list,
+                                        edu_nums, speakers, turns)
             if tasktype == 'hu_ar':
                 link_scores, label_scores = \
                     self.HuARNetwork(predict_path, batch, node_num)
@@ -491,6 +511,10 @@ class CriticNetwork(nn.Module):
         nn.init.xavier_uniform_(self.critic_layer.weight)
         self.nl = nn.Tanh()
 
+    def resetSteps(self) -> None:
+        # 每次切换任务都要运行这个
+        self.task_model.resetSteps()
+
     def forward(self, x, att_mask, segment_ids, withSpkembedding):
         x_out = self.task_model.base_network(x, att_mask, segment_ids, withSpkembedding)[0][:, 0, :].detach()
         c_in = self.nl(self.ff1(x_out))
@@ -498,11 +522,11 @@ class CriticNetwork(nn.Module):
         out = torch.mean(out)
         return x_out, out
 
-    def task_output(self, tasktype, texts, input_mask, segment_ids, speaker_ids,  sep_index_list, edu_nums, speakers, turns, withSpkembedding):
-        return self.task_model(tasktype, texts, input_mask, segment_ids, speaker_ids, sep_index_list, edu_nums, speakers, turns, withSpkembedding)
+    def task_output(self, tasktype, texts, input_mask, segment_ids, speaker_ids,  sep_index_list, edu_nums, speakers, turns, withSpkembedding, subnetwork_size_prob=None, max_steps=None, update_ratio=None):
+        return self.task_model(tasktype, texts, input_mask, segment_ids, speaker_ids, sep_index_list, edu_nums, speakers, turns, withSpkembedding, subnetwork_size_prob, max_steps, update_ratio)
 
 class PolicyNetwork(nn.Module):
-    def __init__(self, args, pretrained_model):
+    def __init__(self, args,  pretrained_model):
         super(PolicyNetwork, self).__init__()
         self.args = args
         self.actor = ActorNetwork(args)
@@ -792,6 +816,10 @@ class PolicyNetwork(nn.Module):
         self.saved_actions = []
         self.rewards = []
 
+    def resetSteps(self) -> None:
+        # 每次切换任务都要运行这个
+        self.critic.resetSteps()
+
     def set_gradient_mask(self, mask, type):
         self.task_optims[type].set_gradient_mask(mask)
 
@@ -800,7 +828,7 @@ class PolicyNetwork(nn.Module):
         action_probs = self.actor(batch_rep)
         return action_probs, batch_rep, exp_reward
     
-    def compute_Pat1_and_loss_reward(self, tasktype, eval_dataloader,source_file):
+    def compute_Pat1_and_loss_reward(self, tasktype, eval_dataloader,source_file, subnetwork_size_prob, max_steps, update_ratio):
         eval_matrix = {
             'hypothesis': None,
             'reference': None,
@@ -816,7 +844,7 @@ class PolicyNetwork(nn.Module):
             mask = get_mask(edu_nums + 1, self.args.max_edu_dist).cuda()
             with torch.no_grad():
                 link_scores, label_scores = self.critic.task_output(tasktype, texts, input_mask, segment_ids,speaker_ids,
-                                                                    sep_index,edu_nums, speakers, turns,withSpkembedding=False)
+                                                                    sep_index,edu_nums, speakers, turns,False, subnetwork_size_prob, max_steps, update_ratio)
 
             eval_link_loss, eval_label_loss = compute_loss(link_scores, label_scores, graphs, mask)
             accum_eval_link_loss.append((eval_link_loss.sum(), eval_link_loss.size(-1)))
@@ -861,7 +889,7 @@ class PolicyNetwork(nn.Module):
         print('Pat1 is {}, SessAcc is {}'.format(Pat1, SessAcc))
         return Pat1, SessAcc, eval_link_loss
 
-    def compute_SI_Pat1_and_loss_reward(self, tasktype, eval_dataloader, source_file):
+    def compute_SI_Pat1_and_loss_reward(self, tasktype, eval_dataloader, source_file, subnetwork_size_prob, max_steps, update_ratio):
         #只找最后一个utterance的确定的spk，golden是spk的数量，不是utterance的数量
         eval_matrix = {
             'hypothesis': None,
@@ -878,7 +906,7 @@ class PolicyNetwork(nn.Module):
             mask = get_mask(edu_nums + 1, self.args.max_edu_dist).cuda()
             with torch.no_grad():
                 link_scores, label_scores = self.critic.task_output(tasktype, texts, input_mask, segment_ids, speaker_ids,
-                                                                    sep_index,edu_nums, speakers, turns,withSpkembedding=False)
+                                                                    sep_index,edu_nums, speakers, turns,False, subnetwork_size_prob, max_steps, update_ratio)
 
             eval_link_loss, eval_label_loss = compute_loss(link_scores, label_scores, graphs, mask)
             accum_eval_link_loss.append((eval_link_loss.sum(), eval_link_loss.size(-1)))
@@ -918,7 +946,7 @@ class PolicyNetwork(nn.Module):
 
 
 
-    def compute_RS_f1_and_loss_reward(self, tasktype, eval_dataloader, des_file=None):
+    def compute_RS_f1_and_loss_reward(self, tasktype, eval_dataloader, des_file=None, subnetwork_size_prob=None, max_steps=None, update_ratio=None):
         """
         计算
         :param eval_data:
@@ -937,7 +965,7 @@ class PolicyNetwork(nn.Module):
 
             with torch.no_grad():
                 scores, _ = self.critic.task_output(tasktype, texts, input_mask, segment_ids, speaker_ids, sep_index_list,
-                                                                edu_nums, speakers, turns,withSpkembedding=True)
+                                                                edu_nums, speakers, turns, True,  subnetwork_size_prob, max_steps, update_ratio)
             loss = self.loss_fns[tasktype](scores, labels)
             predict_label1 = torch.max(scores.data, 1)[1].cpu().numpy()
             accum_eval_link_loss += loss.item()
@@ -990,7 +1018,7 @@ class PolicyNetwork(nn.Module):
 
 
 
-    def compute_f1_and_loss_reward(self, tasktype, eval_dataloader):
+    def compute_f1_and_loss_reward(self, tasktype, eval_dataloader, subnetwork_size_prob, max_steps, update_ratio):
         eval_matrix = {
             'hypothesis': None,
             'reference': None,
@@ -1004,7 +1032,7 @@ class PolicyNetwork(nn.Module):
             mask = get_mask(node_num=edu_nums + 1, max_edu_dist=self.args.max_edu_dist).cuda()
             with torch.no_grad():
                 link_scores, label_scores = self.critic.task_output(tasktype, texts, input_mask, segment_ids, speaker_ids, sep_index,
-                                                                edu_nums, speakers, turns,withSpkembedding=False)
+                                                                edu_nums, speakers, turns,False, subnetwork_size_prob, max_steps, update_ratio)
 
             eval_link_loss, eval_label_loss = compute_loss(link_scores, label_scores, graphs, mask)
             accum_eval_link_loss.append((eval_link_loss.sum(), eval_link_loss.size(-1)))
@@ -1104,47 +1132,47 @@ class PolicyNetwork(nn.Module):
         print('tasktype {}, link loss is {}'.format(tasktype, eval_link_loss))
         return total_loss, total_f1
     
-    def train_minibatch(self, task_type, batch, withSpkembedding=False):
+    def train_minibatch(self, task_type, batch, withSpkembedding=False,subnetwork_size_prob=None, max_steps=None, update_ratio=None):
         accum_train_link_loss = accum_train_label_loss = 0
-        for mini_batch in batch:
-            texts, input_mask, segment_ids, speaker_ids, sep_index, pairs, graphs, speakers, turns, edu_nums = mini_batch
-            texts, input_mask, segment_ids, speaker_ids, graphs, speakers, turns, edu_nums = \
-                    texts.cuda(), input_mask.cuda(), segment_ids.cuda(), speaker_ids.cuda(), graphs.cuda(), speakers.cuda(), turns.cuda(), edu_nums.cuda()
-            mask = get_mask(node_num=edu_nums + 1, max_edu_dist=self.args.max_edu_dist).cuda()
-            link_scores, label_scores = self.critic.task_output(task_type, texts, input_mask, segment_ids, speaker_ids,  sep_index,
-                                                                edu_nums, speakers, turns, withSpkembedding=withSpkembedding)
-            if task_type == 'hu_rs' or task_type == 'ou5_rs' or task_type == 'ou10_rs' or task_type == 'ou15_rs':
-                link_loss = self.loss_fns[task_type](link_scores, graphs)
-                label_loss = torch.tensor([0]) #default
-                loss = link_loss
-            elif task_type=='hu_ar' or task_type=='ou5_ar' or task_type=='ou10_ar' or task_type=='ou15_ar' or \
-                task_type=='hu_si' or task_type=='ou5_si' or task_type=='ou10_si' or task_type=='ou15_si':
-                link_loss, label_loss = compute_loss(link_scores.clone(), label_scores.clone(), graphs, mask )
-                link_loss = link_loss.mean()
-                label_loss = label_loss.mean()
-                loss = link_loss
-            elif task_type =='parsing':
-                link_loss, label_loss = compute_loss(link_scores.clone(), label_scores.clone(), graphs, mask )
-                link_loss = link_loss.mean()
-                label_loss = label_loss.mean()
-                loss = link_loss + label_loss
-            self.critic.task_model.zero_grad()
-            loss.backward()
-            self.task_optims[task_type].step()
-            accum_train_link_loss += link_loss.item()
-            accum_train_label_loss += label_loss.item()
-            if self.args.debug:
-                break
+        # for mini_batch in batch:
+        texts, input_mask, segment_ids, speaker_ids, sep_index, pairs, graphs, speakers, turns, edu_nums = batch
+        texts, input_mask, segment_ids, speaker_ids, graphs, speakers, turns, edu_nums = \
+                texts.cuda(), input_mask.cuda(), segment_ids.cuda(), speaker_ids.cuda(), graphs.cuda(), speakers.cuda(), turns.cuda(), edu_nums.cuda()
+        mask = get_mask(node_num=edu_nums + 1, max_edu_dist=self.args.max_edu_dist).cuda()
+        link_scores, label_scores = self.critic.task_output(task_type, texts, input_mask, segment_ids, speaker_ids,  sep_index,
+                                                            edu_nums, speakers, turns, withSpkembedding,
+                                                            subnetwork_size_prob, max_steps, update_ratio)
+        if task_type == 'hu_rs' or task_type == 'ou5_rs' or task_type == 'ou10_rs' or task_type == 'ou15_rs':
+            link_loss = self.loss_fns[task_type](link_scores, graphs)
+            label_loss = torch.tensor([0]) #default
+            loss = link_loss
+        elif task_type=='hu_ar' or task_type=='ou5_ar' or task_type=='ou10_ar' or task_type=='ou15_ar' or \
+            task_type=='hu_si' or task_type=='ou5_si' or task_type=='ou10_si' or task_type=='ou15_si':
+            link_loss, label_loss = compute_loss(link_scores.clone(), label_scores.clone(), graphs, mask )
+            link_loss = link_loss.mean()
+            label_loss = label_loss.mean()
+            loss = link_loss
+        elif task_type =='parsing':
+            link_loss, label_loss = compute_loss(link_scores.clone(), label_scores.clone(), graphs, mask )
+            link_loss = link_loss.mean()
+            label_loss = label_loss.mean()
+            loss = link_loss + label_loss
+        self.critic.task_model.zero_grad()
+        loss.backward()
+        self.task_optims[task_type].step()
+        accum_train_link_loss += link_loss.item()
+        accum_train_label_loss += label_loss.item()
+        
         return accum_train_link_loss, accum_train_label_loss
 
-    def train_minibatch_rl(self, task_type, batch,withSpkembedding=False):
+    def train_minibatch_rl(self, task_type, batch,withSpkembedding=False, subnetwork_size_prob=None, max_steps=None, update_ratio=None):
         accum_train_link_loss = accum_train_label_loss = 0
         texts, input_mask, segment_ids, labels, sep_index, pairs, graphs, speakers, turns, edu_nums = batch
         texts, input_mask, segment_ids, graphs, speakers, turns, edu_nums = \
                 texts.cuda(), input_mask.cuda(), segment_ids.cuda(), graphs.cuda(), speakers.cuda(), turns.cuda(), edu_nums.cuda()
         mask = get_mask(node_num=edu_nums + 1, max_edu_dist=self.args.max_edu_dist).cuda()
         link_scores, label_scores = self.critic.task_output(task_type, texts, input_mask, segment_ids,  sep_index,
-                                                            edu_nums, speakers, turns,withSpkembedding=withSpkembedding)
+                                                            edu_nums, speakers, turns,withSpkembedding, subnetwork_size_prob, max_steps, update_ratio)
         link_loss, label_loss = compute_loss(link_scores.clone(), label_scores.clone(), graphs, mask)
         link_loss = link_loss.mean()
         label_loss = label_loss.mean()
@@ -1185,14 +1213,25 @@ class SSAModule(nn.Module):
         if self.params.with_GRU:
             self.gru = nn.GRU(params.hidden_size, params.hidden_size // 2, batch_first=True, bidirectional=True)
         self.path_emb = PathEmbedding(params)
-        self.path_update = PathUpdateModel(params)
-        self.gnn = StructureAwareAttention(params.hidden_size, params.path_hidden_size, params.num_heads,
+        if params.DynamicST:
+            self.path_update = DynamicPathUpdateModel(params)
+            self.gnn = DynamicStructureAwareAttention(params.hidden_size, params.path_hidden_size, params.num_heads,
                                            params.dropout)
+        else:
+            self.path_update = PathUpdateModel(params)
+            self.gnn = StructureAwareAttention(params.hidden_size, params.path_hidden_size, params.num_heads,
+                                            params.dropout)
         self.layer_num = params.num_layers
         self.norm = nn.LayerNorm(params.hidden_size)
         self.dropout = nn.Dropout(params.dropout)
         self.hidden_size = params.hidden_size
         self.root = nn.Parameter(torch.zeros(params.hidden_size), requires_grad=False)
+
+    def resetSteps(self) -> None:
+        # 每次切换任务都要运行这个
+        if self.params.DynamicST: 
+             self.path_update.resetSteps()
+             self.gnn.resetSteps()
 
     def __fetch_sep_rep2(self, ten_output, seq_index):
         batch, seq_len, hidden_size = ten_output.shape
@@ -1221,7 +1260,7 @@ class SSAModule(nn.Module):
             total_new_sep_index_list.append(new_sep_index_list)
         return max_edu, total_new_sep_index_list
 
-    def forward(self, SentenceEmbedding, sep_index_list, edu_nums, speakers, turns):
+    def forward(self, SentenceEmbedding, sep_index_list, edu_nums, speakers, turns, subnetwork_size_prob=None, max_steps=None, update_ratio=None):
         sentences = SentenceEmbedding[0]
         batch_size = sentences.shape[0]
         edu_num, pad_sep_index_list = self.padding_sep_index_list(sep_index_list)
@@ -1240,11 +1279,16 @@ class SSAModule(nn.Module):
         const_path = self.path_emb(speakers, turns)
         struct_path = torch.zeros_like(const_path)
         for _ in range(self.layer_num):
-            nodes = self.gnn(nodes, edu_attn_mask, struct_path + const_path)
-            struct_path = self.path_update(nodes, const_path, struct_path)
+            if self.params.DynamicST:
+                nodes = self.gnn(nodes, edu_attn_mask, struct_path + const_path, subnetwork_size_prob, max_steps, update_ratio)
+                struct_path = self.path_update(nodes, const_path, struct_path, None, subnetwork_size_prob, max_steps, update_ratio)
+            else:
+                nodes = self.gnn(nodes, edu_attn_mask, struct_path + const_path)
+                struct_path = self.path_update(nodes, const_path, struct_path)
             struct_path = self.dropout(struct_path)
         predicted_path = torch.cat((struct_path, struct_path.transpose(1, 2)), -1)
         return predicted_path,struct_path, batch_size, node_num
+    
 #cited from wang et al 2021
 class StructureAwareAttention(nn.Module):
     def __init__(self, hidden_size, path_hidden_size, head_num, dropout):
@@ -1359,6 +1403,113 @@ class PathUpdateModel(nn.Module):
         z = torch.sigmoid(self.z(rz_input))
 
         u = torch.tanh(self.c(nodes) + r * self.u(hx))
+
+        new_h = z * hx + (1 - z) * u
+        return new_h
+
+
+#config.hidden_size, self.all_head_size,True,config.subnetwork_size_prob,config.max_steps,config.update_ratio
+#cited from wang et al 2021
+class DynamicStructureAwareAttention(nn.Module):
+    def __init__(self,  hidden_size, path_hidden_size, head_num, dropout):
+        super(DynamicStructureAwareAttention, self).__init__()
+        self.q_transform = DPSDense(hidden_size, hidden_size, True)
+        self.k_transform = DPSDense(hidden_size, hidden_size, True)
+        self.v_transform = DPSDense(hidden_size, hidden_size, True)
+        self.struct_k_transform = DPSDense(path_hidden_size, hidden_size // head_num, True)
+        self.struct_v_transform = DPSDense(path_hidden_size, hidden_size // head_num, True)
+        self.o_transform = DPSDense(hidden_size, hidden_size, True)
+        self.activation = nn.ReLU()
+        self.hidden_size = hidden_size
+        self.head_num = head_num
+        self.dropout = nn.Dropout(dropout)
+        self.norm = nn.LayerNorm(hidden_size)
+        self.path_norm = nn.LayerNorm(path_hidden_size)
+
+    def resetSteps(self) -> None:
+        self.q_transform.reset_Steps()
+        self.k_transform.reset_Steps()
+        self.v_transform.reset_Steps()
+        self.struct_k_transform.reset_Steps()
+        self.struct_v_transform.reset_Steps()
+        self.o_transform.reset_Steps()
+
+    def forward(self, nodes, bias, paths, subnetwork_size_prob, max_steps, update_ratio):
+        q = self.q_transform(nodes, subnetwork_size_prob, max_steps, update_ratio)
+        k = self.k_transform(nodes, subnetwork_size_prob, max_steps, update_ratio)
+        v = self.v_transform(nodes, subnetwork_size_prob, max_steps, update_ratio)
+        q = self.split_heads(q, self.head_num)
+        k = self.split_heads(k, self.head_num)
+        v = self.split_heads(v, self.head_num)
+        paths = self.path_norm(paths)
+        struct_k  = self.struct_k_transform(paths, subnetwork_size_prob, max_steps, update_ratio)
+        struct_v  = self.struct_v_transform(paths, subnetwork_size_prob, max_steps, update_ratio)
+        q = q * (self.hidden_size // self.head_num) ** -0.5
+        w = torch.matmul(q, k.transpose(-1, -2)) + torch.matmul(q.transpose(1, 2),
+                                                                struct_k.transpose(-1, -2)).transpose(1, 2) + bias
+        w = torch.nn.functional.softmax(w, dim=-1)
+        output = torch.matmul(w, v) + torch.matmul(w.transpose(1, 2), struct_v).transpose(1, 2)
+        output = self.activation(self.o_transform(self.combine_heads(output), subnetwork_size_prob, max_steps, update_ratio ))
+        return self.norm(nodes + self.dropout(output))
+
+    @staticmethod
+    def split_heads(x, heads):
+        batch = x.shape[0]
+        length = x.shape[1]
+        channels = x.shape[2]
+
+        y = torch.reshape(x, [batch, length, heads, channels // heads])
+        return torch.transpose(y, 2, 1)
+
+    @staticmethod
+    def combine_heads(x):
+        batch = x.shape[0]
+        heads = x.shape[1]
+        length = x.shape[2]
+        channels = x.shape[3]
+
+        y = torch.transpose(x, 2, 1)
+
+        return torch.reshape(y, [batch, length, heads * channels])
+
+    @staticmethod
+    def masking_bias(mask, inf=-1e9):
+        ret = ~mask * inf
+        return torch.unsqueeze(torch.unsqueeze(ret, 1), 1)
+
+
+
+class DynamicPathUpdateModel(nn.Module):
+    def __init__(self, params):
+        super(DynamicPathUpdateModel, self).__init__()
+        self.x_dim = params.hidden_size
+        self.h_dim = params.path_hidden_size
+        self.r = DPSDense(2*self.x_dim + self.h_dim, self.h_dim, True)
+        self.z = DPSDense(2*self.x_dim + self.h_dim, self.h_dim, True)
+
+        self.c =DPSDense(2*self.x_dim, self.h_dim, True)
+        self.u =DPSDense(self.h_dim, self.h_dim, True)
+
+    def resetSteps(self) -> None:
+        self.r.reset_Steps()
+        self.z.reset_Steps()
+        self.c.reset_Steps()
+        self.u.reset_Steps()
+
+    def forward(self, nodes, bias, hx, mask=None, subnetwork_size_prob=0.3, max_steps=1, update_ratio=0.05):
+        batch_size, node_num, hidden_size = nodes.size()
+        nodes = nodes.unsqueeze(1).expand(batch_size, node_num, node_num, hidden_size)
+        nodes = torch.cat((nodes, nodes.transpose(1, 2)),dim=-1)  # B N N H
+        if mask is not None:
+            nodes, bias = nodes[mask], bias[mask]
+        if hx is None:
+            hx = torch.zeros_like(bias)
+
+        rz_input = torch.cat((nodes, hx), -1)
+        r = torch.sigmoid(self.r(rz_input,subnetwork_size_prob, max_steps, update_ratio))
+        z = torch.sigmoid(self.z(rz_input, subnetwork_size_prob, max_steps, update_ratio))
+
+        u = torch.tanh(self.c(nodes,subnetwork_size_prob, max_steps, update_ratio) + r * self.u(hx,subnetwork_size_prob, max_steps, update_ratio))
 
         new_h = z * hx + (1 - z) * u
         return new_h
