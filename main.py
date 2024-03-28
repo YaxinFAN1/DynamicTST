@@ -86,6 +86,7 @@ if __name__ == '__main__':
     parser.add_argument('--pretrained_model_learning_rate', type=float, default=1e-5)
     parser.add_argument('--ST_epoches', type=int, default=5)
     parser.add_argument('--TST_epoches', type=int, default=3)
+    parser.add_argument('--DynamicST_epoches', type=int, default=3)
     parser.add_argument('--RL_epoches', type=int, default=3)
     parser.add_argument('--TrainingParsingTimes', type=int, default=1)
     parser.add_argument('--mol_pool_size', type=int, default=100)
@@ -108,6 +109,7 @@ if __name__ == '__main__':
     parser.add_argument('--ou15_batch_size_rl', type=int, default=4000)
     parser.add_argument('--ST_model_path', type=str, default='model.pt')
     parser.add_argument('--TST_model_path', type=str, default='model.pt')
+    parser.add_argument('--DynamicST_model_path', type=str, default='model.pt')
     parser.add_argument('--hu_select_id_file', type=str, default='hu_select_id_file.txt')
     parser.add_argument('--ou5_select_id_file', type=str, default='ou5_select_id_file.txt')
     parser.add_argument('--ou10_select_id_file', type=str, default='ou10_select_id_file.txt')
@@ -131,6 +133,8 @@ if __name__ == '__main__':
     parser.add_argument('--hdim', type=int, default= 384)
     parser.add_argument('--debug', action="store_true")
     parser.add_argument('--seed', type=int, default= 512)
+    parser.add_argument('--subnetwork_size_prob', type=float, default= 0.7)
+    parser.add_argument('--update_ratio', type=float, default= 0.05)
     parser.add_argument('--withSpkembedding', action="store_true")
     parser.add_argument('--only_SABERT', action="store_true")
     parser.add_argument('--only_BERT', action="store_true")
@@ -140,6 +144,7 @@ if __name__ == '__main__':
     parser.add_argument('--with_GRU', action="store_true")
     parser.add_argument('--source_file', type=str, default='')
     parser.add_argument('--ParsingSeperate', action="store_true")# 预测link和rel的时候是否分开
+    parser.add_argument('--DynamicST', action="store_true")# 是否采用DynamicST
     
     args = parser.parse_args()
     seed_everything(args.seed)
@@ -395,36 +400,48 @@ if __name__ == '__main__':
     # pretrained_model = AutoModel.from_pretrained(args.model_name_or_path)
 
     def train_collate_fn_mol(examples):
+        
+        texts, input_mask, segment_ids, speaker_ids, sep_index,pairs, graphs, speakers, turns, edu_nums, ids = zip(*examples)
+        texts = torch.stack(texts, dim=0)
+        segment_ids = torch.stack(segment_ids, dim=0)
+        input_mask = torch.stack(input_mask, dim=0)
+        speaker_ids = torch.stack(speaker_ids, dim=0)
+        assert texts.shape[0] == segment_ids.shape[0] == input_mask.shape[0] == speaker_ids.shape[0] == len(sep_index)
+        speakers = ints_to_tensor(list(speakers))
+        turns = ints_to_tensor(list(turns))
+        graphs = ints_to_tensor(list(graphs))
+        edu_nums = torch.tensor(edu_nums)
+        
+        return texts, input_mask, segment_ids, speaker_ids, sep_index,pairs, graphs, speakers, turns, edu_nums
+        # def pool(d):
+        #     d = sorted(d, key=lambda x: x[9])
+        #     edu_nums = [x[9] for x in d]
+        #     buckets = []
+        #     i, j, t = 0, 0, 0
+        #     for edu_num in edu_nums:
+        #         if t + edu_num > args.mol_batch_size:
+        #             buckets.append((i, j))
+        #             i, t = j, 0
+        #         t += edu_num
+        #         j += 1
+        #     buckets.append((i, j))
 
-        def pool(d):
-            d = sorted(d, key=lambda x: x[9])
-            edu_nums = [x[9] for x in d]
-            buckets = []
-            i, j, t = 0, 0, 0
-            for edu_num in edu_nums:
-                if t + edu_num > args.mol_batch_size:
-                    buckets.append((i, j))
-                    i, t = j, 0
-                t += edu_num
-                j += 1
-            buckets.append((i, j))
+        #     for bucket in buckets:
+        #         batch = d[bucket[0]:bucket[1]]
 
-            for bucket in buckets:
-                batch = d[bucket[0]:bucket[1]]
+        #         texts, input_mask, segment_ids, speaker_ids,sep_index, pairs,graphs, speakers, turns, edu_nums, _ = zip(*batch)
+        #         texts = torch.stack(texts, dim=0)
+        #         segment_ids = torch.stack(segment_ids, dim=0)
+        #         input_mask = torch.stack(input_mask, dim=0)
+        #         speaker_ids = torch.stack(speaker_ids, dim=0)
+        #         assert texts.shape[0] == segment_ids.shape[0] == input_mask.shape[0] == len(sep_index)
+        #         speakers = ints_to_tensor(list(speakers))
+        #         turns = ints_to_tensor(list(turns))
+        #         graphs = ints_to_tensor(list(graphs))
+        #         edu_nums = torch.tensor(edu_nums)
+        #         yield texts, input_mask, segment_ids, speaker_ids, sep_index,pairs, graphs, speakers, turns, edu_nums
 
-                texts, input_mask, segment_ids, speaker_ids,sep_index, pairs,graphs, speakers, turns, edu_nums, _ = zip(*batch)
-                texts = torch.stack(texts, dim=0)
-                segment_ids = torch.stack(segment_ids, dim=0)
-                input_mask = torch.stack(input_mask, dim=0)
-                speaker_ids = torch.stack(speaker_ids, dim=0)
-                assert texts.shape[0] == segment_ids.shape[0] == input_mask.shape[0] == len(sep_index)
-                speakers = ints_to_tensor(list(speakers))
-                turns = ints_to_tensor(list(turns))
-                graphs = ints_to_tensor(list(graphs))
-                edu_nums = torch.tensor(edu_nums)
-                yield texts, input_mask, segment_ids, speaker_ids, sep_index,pairs, graphs, speakers, turns, edu_nums
-
-        return pool(examples)
+        # return pool(examples)
 
     def eval_collate_fn_mol(examples):
         texts, input_mask, segment_ids, speaker_ids, sep_index,pairs, graphs, speakers, turns, edu_nums, ids = zip(*examples)
@@ -567,22 +584,28 @@ if __name__ == '__main__':
         return pool(examples)
 
 
-    def MultiTaskLearning(mtl_model, train_hu_ar_dataloader=None, train_ou5_ar_dataloader=None,
+    def MultiTaskLearning(args, mtl_model, train_hu_ar_dataloader=None, train_ou5_ar_dataloader=None,
                                         train_ou10_ar_dataloader=None, train_ou15_ar_dataloader=None, 
                                         train_hu_si_dataloader=None, train_ou5_si_dataloader=None,
                                         train_ou10_si_dataloader=None, train_ou15_si_dataloader=None, 
                                         train_hu_rs_dataloader=None, train_ou5_rs_dataloader=None,
                                         train_ou10_rs_dataloader=None, train_ou15_rs_dataloader=None,
-                                        train_mol_dataloader=None):
+                                        train_mol_dataloader=None, subnetwork_size_prob=0.7, update_ratio=0.05):
         step = 0
         total_mol_parsing_link_loss = total_hu_ar_loss = total_hu_si_loss = total_hu_rs_loss  = 0
         total_mol_parsing_Rel_loss  = 0
 
         print('training hu rs-------------')
         # train hu RS
+        if args.DynamicST:
+                model.resetSteps()# 重置步数
+        max_steps = len(train_hu_rs_dataloader)
+        print('max_steps for hu rs {}'.format(max_steps))
         for hu_rs_data_batch in tqdm(train_hu_rs_dataloader):
             hu_rs_link_loss, _ = \
-                mtl_model.train_minibatch('hu_rs', hu_rs_data_batch, withSpkembedding=True)
+                mtl_model.train_minibatch('hu_rs', hu_rs_data_batch, withSpkembedding=True,
+                                          subnetwork_size_prob =subnetwork_size_prob,max_steps = max_steps,
+                                           update_ratio = update_ratio )
             total_hu_rs_loss += hu_rs_link_loss
             step += 1
             if step % args.report_step == 0:
@@ -590,12 +613,16 @@ if __name__ == '__main__':
                 total_hu_rs_loss = 0
             if args.debug:
                 break 
-
+        if args.DynamicST:
+            model.resetSteps()# 重置步数
         print('training hu ar-------------')
         # #train hu ar
+        max_steps = len(train_hu_ar_dataloader)
+        print('max_steps for hu ar {}'.format(max_steps))
         for hu_data_batch in tqdm(train_hu_ar_dataloader):
             hu_ar_loss, _ = \
-                mtl_model.train_minibatch('hu_ar', hu_data_batch)
+                mtl_model.train_minibatch('hu_ar', hu_data_batch, subnetwork_size_prob =subnetwork_size_prob,max_steps = max_steps,
+                                           update_ratio = update_ratio)
             total_hu_ar_loss += hu_ar_loss
             step += 1
             if step % args.report_step == 0:
@@ -605,9 +632,14 @@ if __name__ == '__main__':
                 break 
         print('training hu si-------------')
         # #train hu si
+        if args.DynamicST:
+            model.resetSteps()# 重置步数
+        max_steps = len(train_hu_si_dataloader)
+        print('max_steps for hu si {}'.format(max_steps))
         for hu_data_batch in tqdm(train_hu_si_dataloader):
             hu_si_loss, _ = \
-                mtl_model.train_minibatch('hu_si', hu_data_batch)
+                mtl_model.train_minibatch('hu_si', hu_data_batch,subnetwork_size_prob =subnetwork_size_prob,max_steps = max_steps,
+                                           update_ratio = update_ratio)
             total_hu_si_loss += hu_si_loss
             step += 1
             if step % args.report_step == 0:
@@ -619,10 +651,15 @@ if __name__ == '__main__':
         
         print('training parsing-------------')
         # train mol
+        if args.DynamicST:
+            model.resetSteps()# 重置步数
+        max_steps = len(train_mol_dataloader)
+        print('max_steps for mol {}'.format(max_steps))
         for i in range(args.TrainingParsingTimes):
             for mol_data_batch in tqdm(train_mol_dataloader):
                 temp_link_mol_loss, temp_rel_mol_loss = \
-                    mtl_model.train_minibatch('parsing', mol_data_batch)
+                    mtl_model.train_minibatch('parsing', mol_data_batch, subnetwork_size_prob =subnetwork_size_prob,max_steps = max_steps,
+                                           update_ratio = update_ratio)
                 total_mol_parsing_link_loss += temp_link_mol_loss
                 total_mol_parsing_Rel_loss += temp_rel_mol_loss
                 step += 1
@@ -640,7 +677,6 @@ if __name__ == '__main__':
             print('loading mask: {}'.format(mask_save_path))
             gradient_mask = torch.load(mask_save_path)
         else:
-            
             gradient_mask = dict()
             model.train()
             for name, params in model.named_parameters():
@@ -878,6 +914,8 @@ if __name__ == '__main__':
         # model.set_gradient_mask(ou15_mask, 'ou15_ar')
         if args.TST_Learning_Mode:
             print('begin training TST')
+        elif args.DynamicST:
+            print('begin training Dynamic ST')
         else:
             print('begin training ST')
 
@@ -885,35 +923,55 @@ if __name__ == '__main__':
         max_epoch = -1
         if args.TST_Learning_Mode:
             total_epoch = args.TST_epoches
+        elif args.DynamicST:
+            total_epoch = args.DynamicST_epoches
         else:
             total_epoch = args.ST_epoches
         
         for epoch in range(total_epoch):
             # print('{} epoch TST finetuning..'.format(epoch + 1))
             model.train() 
-            MultiTaskLearning(model, 
+            MultiTaskLearning(args,model, 
                               train_mol_dataloader = train_dataloader_mol,
                               train_hu_ar_dataloader = train_dataloader_hu_ar,
                               train_hu_si_dataloader = train_dataloader_hu_si,
-                              train_hu_rs_dataloader = train_dataloader_hu_rs 
-                              )
-            
-
+                              train_hu_rs_dataloader = train_dataloader_hu_rs,
+                              subnetwork_size_prob = args.subnetwork_size_prob, 
+                              update_ratio = args.update_ratio)
+            model.eval()
+            if args.DynamicST:
+                model.resetSteps()# 重置步数
             mol_linkandrel_loss, _ = model.compute_f1_and_loss_reward(tasktype='parsing',
-                                                                      eval_dataloader=eval_dataloader_mol)
-           
+                                                                      eval_dataloader=eval_dataloader_mol,
+                                                                       subnetwork_size_prob=args.subnetwork_size_prob, 
+                                                                        max_steps=len(eval_dataloader_mol), 
+                                                                        update_ratio=args.update_ratio)
+            if args.DynamicST:
+                model.resetSteps()# 重置步数
             Pat1_ar, SessAc_ar, ar_link_loss =  model.compute_Pat1_and_loss_reward(tasktype='hu_ar',
                                                                       eval_dataloader=eval_dataloader_hu_ar,
-                                                                      source_file=args.eval_hu_ar_file)
-
+                                                                      source_file=args.eval_hu_ar_file,
+                                                                       subnetwork_size_prob=args.subnetwork_size_prob, 
+                                                                        max_steps=len(eval_dataloader_hu_ar), 
+                                                                        update_ratio=args.update_ratio)
+            if args.DynamicST:
+                model.resetSteps()# 重置步数
             hu_rs_eval_loss, hu_epoch_f1 = model.compute_RS_f1_and_loss_reward(tasktype='hu_rs',
-                                                                      eval_dataloader=eval_dataloader_hu_rs)
+                                                                      eval_dataloader=eval_dataloader_hu_rs,
+                                                                        subnetwork_size_prob=args.subnetwork_size_prob, 
+                                                                        max_steps=len(eval_dataloader_hu_rs), 
+                                                                        update_ratio=args.update_ratio)
             
             
-
+            if args.DynamicST:
+                model.resetSteps()# 重置步数
             Pat1_si, hu_si_loss = model.compute_SI_Pat1_and_loss_reward(tasktype='hu_si',
                                                                       eval_dataloader=eval_dataloader_hu_si,
-                                                                      source_file=args.eval_hu_si_file)
+                                                                      source_file=args.eval_hu_si_file,
+                                                                      subnetwork_size_prob=args.subnetwork_size_prob, 
+                                                                        max_steps=len(eval_dataloader_hu_si), 
+                                                                        update_ratio=args.update_ratio)
+                                                                      
             
            
             
@@ -924,6 +982,8 @@ if __name__ == '__main__':
             if total_loss < max_reward:
                 if args.TST_Learning_Mode:
                     torch.save(model.state_dict(), args.TST_model_path + '.pt')
+                elif args.DynamicST:
+                    torch.save(model.state_dict(), args.DynamicST_model_path + '.pt')
                 else:
                     torch.save(model.state_dict(), args.ST_model_path + '.pt')
                 max_reward = total_loss
@@ -952,6 +1012,9 @@ if __name__ == '__main__':
         if args.TST_Learning_Mode:
             print('loading path : {}'.format(args.TST_model_path+'.pt'))
             state_dict = torch.load(args.TST_model_path+'.pt')
+        elif args.DynamicST:
+            print('loading path : {}'.format(args.DynamicST_model_path +'.pt'))
+            state_dict = torch.load(args.DynamicST_model_path +'.pt')
         else:
             print('loading path : {}'.format(args.ST_model_path+'.pt'))
             state_dict = torch.load(args.ST_model_path+'.pt')
@@ -959,16 +1022,28 @@ if __name__ == '__main__':
         model.eval()
         print('evaluating Mol Parsing:')
         total_loss, total_f1 = model.compute_f1_and_loss_reward(tasktype='parsing',
-                                                          eval_dataloader=test_dataloader_mol)
+                                                          eval_dataloader=test_dataloader_mol,
+                                                          subnetwork_size_prob=args.subnetwork_size_prob, 
+                                                          max_steps=len(test_dataloader_mol), 
+                                                          update_ratio=args.update_ratio)
         print('evaluating hu ar:')
         Pat1_ar, SessAc_ar, ar_link_loss =  model.compute_Pat1_and_loss_reward(tasktype='hu_ar',
                                                                       eval_dataloader=test_dataloader_hu_ar,
-                                                                      source_file=args.test_hu_ar_file)
+                                                                      source_file=args.test_hu_ar_file,
+                                                                      subnetwork_size_prob=args.subnetwork_size_prob, 
+                                                                        max_steps=len(test_dataloader_hu_ar), 
+                                                                        update_ratio=args.update_ratio)
 
         print('evaluating hu si :')
         Pat1, _ = model.compute_SI_Pat1_and_loss_reward(tasktype='hu_si',
                                                           eval_dataloader=test_dataloader_hu_si,
-                                                           source_file=args.test_hu_si_file)
+                                                           source_file=args.test_hu_si_file,
+                                                           subnetwork_size_prob=args.subnetwork_size_prob, 
+                                                                        max_steps=len(test_dataloader_hu_si), 
+                                                                        update_ratio=args.update_ratio)
         print('evaluating hu rs:')
         hu_rs_eval_loss, hu_epoch_f1 = model.compute_RS_f1_and_loss_reward(tasktype='hu_rs',
-                                                            eval_dataloader=test_dataloader_hu_rs)
+                                                            eval_dataloader=test_dataloader_hu_rs,
+                                                            subnetwork_size_prob=args.subnetwork_size_prob, 
+                                                                        max_steps=len(test_dataloader_hu_rs), 
+                                                                        update_ratio=args.update_ratio)

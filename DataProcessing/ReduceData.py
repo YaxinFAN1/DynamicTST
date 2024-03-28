@@ -40,44 +40,67 @@ class ReduceData:
         print(len(sampled_examples))
         return sampled_examples 
     
-    def write_file(self):
+    def write_file(self, type='rs'):
         sample_datas = self.sample_datas()
+
         with open(self.des_file, 'w', encoding='utf8') as fw:
-            json.dump(sample_datas, fw, ensure_ascii=False)
+            if type == 'rs':
+                for da in sample_datas:
+                    fw.write(json.dumps(da, ensure_ascii=False) + '\n')
+            elif type=='parsing':
+                json.dump(sample_datas, fw, ensure_ascii=False)
+            else:
+                raise KeyError
 
 
 if __name__ == '__main__':
 
 
     data_dir='../../TSTRL/Data'
-    train_mol_file=data_dir + "/Molweni/train.json"
-    reduce_train_mol_file=data_dir + "/Molweni/train_reduce_50.json"
-    train_hu_file=data_dir + "/Hu_Dataset/Hu_Link_Dir/train.json"
-    reduce_train_hu_file = data_dir + "/Hu_Dataset/Hu_Link_Dir/train_reduce_50.json"
+    # train_mol_file=data_dir + "/Molweni/train.json"
+    # reduce_train_mol_file=data_dir + "/Molweni/train_reduce_50.json"
+    # train_hu_file=data_dir + "/Hu_Dataset/Hu_Link_Dir/train.json"
+    # reduce_train_hu_file = data_dir + "/Hu_Dataset/Hu_Link_Dir/train_reduce_50.json"
 
-    train_ou5_file=data_dir + "/Ou_Dataset/Ou5_Link_Dir/train.json"
-    reduce_train_ou5_file=data_dir + "/Ou_Dataset/Ou5_Link_Dir/train_reduce_50.json"
+    # train_ou5_file=data_dir + "/Ou_Dataset/Ou5_Link_Dir/train.json"
+    # reduce_train_ou5_file=data_dir + "/Ou_Dataset/Ou5_Link_Dir/train_reduce_50.json"
 
-    train_ou10_file=data_dir + "/Ou_Dataset/Ou10_Link_Dir/train.json"
-    reduce_train_ou10_file=data_dir + "/Ou_Dataset/Ou10_Link_Dir/train_reduce_50.json"
+    # train_ou10_file=data_dir + "/Ou_Dataset/Ou10_Link_Dir/train.json"
+    # reduce_train_ou10_file=data_dir + "/Ou_Dataset/Ou10_Link_Dir/train_reduce_50.json"
 
-    train_ou15_file=data_dir + "/Ou_Dataset/Ou15_Link_Dir/train.json"
-    reduce_train_ou15_file=data_dir + "/Ou_Dataset/Ou15_Link_Dir/train_reduce_50.json"
+    # train_ou15_file=data_dir + "/Ou_Dataset/Ou15_Link_Dir/train.json"
+    # reduce_train_ou15_file=data_dir + "/Ou_Dataset/Ou15_Link_Dir/train_reduce_50.json"
 
     train_hu_rs_file=data_dir + "/Hu_Dataset/train.json"
     reduce_train_hu_rs_file=data_dir + "/Hu_Dataset/train_reduce_50.json"
 
-    train_ou5_rs_file=data_dir + "/Ou_Dataset/5_train.json"
-    reduce_train_ou5_rs_file=data_dir + "/Ou_Dataset/5_train_reduce_50.json"
-    train_ou10_rs_file=data_dir + "/Ou_Dataset/10_train.json"
-    reduce_train_ou10_rs_file=data_dir + "/Ou_Dataset/10_train_reduce_50.json"
-    train_ou15_rs_file=data_dir + "/Ou_Dataset/15_train.json"
-    reduce_train_ou15_rs_file=data_dir + "/Ou_Dataset/15_train_reduce_50.json"
+    # train_ou5_rs_file=data_dir + "/Ou_Dataset/5_train.json"
+    # reduce_train_ou5_rs_file=data_dir + "/Ou_Dataset/5_train_reduce_50.json"
+    # train_ou10_rs_file=data_dir + "/Ou_Dataset/10_train.json"
+    # reduce_train_ou10_rs_file=data_dir + "/Ou_Dataset/10_train_reduce_50.json"
+    # train_ou15_rs_file=data_dir + "/Ou_Dataset/15_train.json"
+    # reduce_train_ou15_rs_file=data_dir + "/Ou_Dataset/15_train_reduce_50.json"
     
-    reduceD = ReduceData(src_file=train_ou15_rs_file,
-                            des_file=reduce_train_ou15_rs_file,
+
+    # train_hu_si_file=data_dir + "/Hu_Dataset/Hu_SI_Dir/train_si_parsingType.json"
+    # reduce_train_hu_si_file = data_dir + "/Hu_Dataset/Hu_SI_Dir/train_si_reduce_50.json"
+
+    # train_ou5_si_file=data_dir + "/Ou_Dataset/Ou5_SI_Dir/train_si_parsingType.json"
+    # reduce_train_ou5_si_file=data_dir + "/Ou_Dataset/Ou5_SI_Dir/train_si_reduce_50.json"
+
+    # train_ou10_si_file=data_dir + "/Ou_Dataset/Ou10_SI_Dir/train_si_parsingType.json"
+    # reduce_train_ou10_si_file=data_dir + "/Ou_Dataset/Ou10_SI_Dir/train_si_reduce_50.json"
+
+    # train_ou15_file=data_dir + "/Ou_Dataset/Ou15_Link_Dir/train.json"
+    # reduce_train_ou15_si_file=data_dir + "/Ou_Dataset/Ou15_Link_Dir/train_reduce_50.json"
+
+
+
+
+    reduceD = ReduceData(src_file=train_hu_rs_file,
+                            des_file=reduce_train_hu_rs_file,
                             type='rs')
 
-    reduceD.write_file() 
+    reduceD.write_file(type='rs') 
     
     
